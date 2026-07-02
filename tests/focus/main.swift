@@ -56,7 +56,19 @@ check("arbitrary bundleId alone -> nil",
 check("allowlist accepts terminals", FocusSupport.isAllowedHost("com.mitchellh.ghostty"))
 check("allowlist accepts JetBrains prefix", FocusSupport.isAllowedHost("com.jetbrains.pycharm.ce"))
 check("allowlist accepts Xcode", FocusSupport.isAllowedHost("com.apple.dt.Xcode"))
+check("allowlist accepts VS Code forks", FocusSupport.isAllowedHost("com.google.antigravity")
+      && FocusSupport.isAllowedHost("com.exafunction.windsurf"))
 check("allowlist rejects others", !FocusSupport.isAllowedHost("com.apple.Safari"))
+
+// --- titleMatchCandidates ------------------------------------------------------
+let home = NSHomeDirectory()
+check("candidates deepest first, home filtered",
+      FocusSupport.titleMatchCandidates(forCwd: "\(home)/projects/frontend/src") == ["src", "frontend", "projects"])
+check("short components filtered",
+      FocusSupport.titleMatchCandidates(forCwd: "/tmp/ab/x") == ["tmp"])
+check("home itself yields nothing", FocusSupport.titleMatchCandidates(forCwd: home).isEmpty)
+check("candidates capped at 4",
+      FocusSupport.titleMatchCandidates(forCwd: "/aaa/bbb/ccc/ddd/eee/fff").count == 4)
 
 // --- strategy fall-through on invalid/missing fields --------------------------------
 check("tmux: no pane -> false", !TmuxFocusStrategy().attempt(session(term: "tmux")))
@@ -78,6 +90,14 @@ check("workspace: editor not running -> false",
 check("fallback: unknown host -> false", !AppActivationFallbackStrategy().attempt(session(term: "mystery")))
 check("fallback: spoofed bundleId not activated",
       !AppActivationFallbackStrategy().attempt(session(bundleId: "com.apple.Calculator")))
+// Window-title strategy: only paths that bail before the Accessibility trust
+// check (a headless test run must never trigger the system prompt).
+check("windowtitle: unknown host -> false",
+      !WindowTitleFocusStrategy().attempt(session(term: "mystery", cwd: "/tmp/projects/x")))
+check("windowtitle: app not running -> false",
+      !WindowTitleFocusStrategy().attempt(session(term: "zed", cwd: "/tmp/projects/x")))
+check("windowtitle: no cwd -> false",
+      !WindowTitleFocusStrategy().attempt(session(term: "zed")))
 
 print(failures == 0 ? "\nAll focus logic tests passed." : "\n\(failures) test(s) failed.")
 exit(failures == 0 ? 0 : 1)

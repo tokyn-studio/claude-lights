@@ -34,10 +34,16 @@ enum FocusSupport {
     ]
 
     /// Additional hosts we accept from the captured `__CFBundleIdentifier`:
-    /// IDEs with embedded terminals that set no TERM_PROGRAM.
+    /// IDEs with embedded terminals that set no TERM_PROGRAM, plus VS Code
+    /// forks that report `TERM_PROGRAM=vscode` under their own bundle id.
     private static let allowedHostBundleIds: Set<String> = [
         "com.apple.dt.Xcode",
         "com.google.android.studio",
+        "com.google.antigravity",
+        "com.exafunction.windsurf",
+        "com.microsoft.VSCodeInsiders",
+        "com.vscodium",
+        "com.vscodium.VSCodiumInsiders",
     ]
 
     /// The status file is world-writable, so `bundle_id` is attacker-
@@ -192,6 +198,64 @@ enum FocusSupport {
         } else {
             DispatchQueue.main.sync(execute: block)
         }
+    }
+
+    // MARK: - Accessibility window targeting (IDEs and other terminals)
+
+    /// Whether ClaudeLights may drive other apps' windows via the
+    /// Accessibility API. The first time an IDE session actually needs it,
+    /// the system permission dialog is shown (once per launch); until the
+    /// user grants access the caller falls through to app activation.
+    private static var promptedForAccessibility = false
+    static func ensureAccessibilityTrusted() -> Bool {
+        if AXIsProcessTrusted() { return true }
+        if !promptedForAccessibility {
+            promptedForAccessibility = true
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+        }
+        return false
+    }
+
+    /// Title fragments to look for in window titles, derived from the
+    /// session's working directory: its path components, deepest first, so
+    /// `/Users/me/projects/frontend/src` prefers a window named after `src`,
+    /// then `frontend`. Components of the home directory path and very short
+    /// names are skipped — they'd match half the screen.
+    static func titleMatchCandidates(forCwd cwd: String) -> [String] {
+        let homeComponents = Set(URL(fileURLWithPath: NSHomeDirectory()).pathComponents)
+        let candidates = URL(fileURLWithPath: cwd).pathComponents
+            .reversed()
+            .filter { $0 != "/" && $0.count >= 3 && !homeComponents.contains($0) }
+        return Array(candidates.prefix(4))
+    }
+
+    /// Raises the app window whose title mentions one of `candidates`.
+    /// Returns false when no window matches (or accessibility is denied).
+    static func raiseWindow(pid: pid_t, matching candidates: [String]) -> Bool {
+        let axApp = AXUIElementCreateApplication(pid)
+        var windowsValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsValue) == .success,
+              let windows = windowsValue as? [AXUIElement], !windows.isEmpty
+        else { return false }
+
+        var titles: [(window: AXUIElement, title: String)] = []
+        for window in windows {
+            var titleValue: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleValue) == .success,
+                  let title = titleValue as? String, !title.isEmpty
+            else { continue }
+            titles.append((window, title))
+        }
+
+        for candidate in candidates {
+            for (window, title) in titles where title.range(of: candidate, options: .caseInsensitive) != nil {
+                AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+                AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue)
+                return true
+            }
+        }
+        return false
     }
 
     /// AppleScript to focus the Terminal.app tab whose tty ends with `tty`.
@@ -353,6 +417,33 @@ struct AppleScriptTtyFocusStrategy: FocusStrategy {
 
 // MARK: - Tier 2: exact window
 
+/// Any running host app (JetBrains, Xcode, Antigravity and other VS Code
+/// forks, Ghostty, Warp, …): find the window whose title mentions the
+/// session's directory and raise it via the Accessibility API.
+///
+/// IDE and terminal window titles almost always contain the project folder
+/// name, so matching the cwd's path components (deepest first) picks the
+/// right window without any per-app scripting support. Needs the one-time
+/// Accessibility permission; until granted, the chain falls through to app
+/// activation.
+struct WindowTitleFocusStrategy: FocusStrategy {
+    func attempt(_ session: SessionStatus) -> Bool {
+        guard let bundleId = FocusSupport.hostBundleId(of: session),
+              let cwd = session.cwd,
+              let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first
+        else { return false }
+
+        let candidates = FocusSupport.titleMatchCandidates(forCwd: cwd)
+        guard !candidates.isEmpty,
+              FocusSupport.ensureAccessibilityTrusted(),
+              FocusSupport.raiseWindow(pid: app.processIdentifier, matching: candidates)
+        else { return false }
+
+        FocusSupport.runOnMain { app.activate(options: []) }
+        return true
+    }
+}
+
 /// VS Code / Cursor / Zed: re-opening the session's working directory focuses
 /// the window that already has that folder open.
 ///
@@ -365,8 +456,11 @@ struct WorkspaceFolderFocusStrategy: FocusStrategy {
     private static let terms: Set<String> = ["vscode", "cursor", "zed"]
 
     func attempt(_ session: SessionStatus) -> Bool {
+        // hostBundleId (not the term map): VS Code forks like Antigravity or
+        // Windsurf report TERM_PROGRAM=vscode but must open the folder in
+        // their own app, identified by the captured bundle id.
         guard let term = session.term, Self.terms.contains(term),
-              let bundleId = FocusSupport.bundleIdByTerm[term],
+              let bundleId = FocusSupport.hostBundleId(of: session),
               FocusSupport.isRunning(bundleId: bundleId),
               let cwd = session.cwd,
               FileManager.default.fileExists(atPath: cwd)
