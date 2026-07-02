@@ -43,12 +43,20 @@ check("resolveBinary nil for unknown", FocusSupport.resolveBinary(named: "defini
 check("resolveBinary prefers extra candidates",
       FocusSupport.resolveBinary(named: "true", extraCandidates: ["/bin/ls"]) == "/bin/ls")
 
-// --- hostBundleId ----------------------------------------------------------------
+// --- hostBundleId + allowlist ------------------------------------------------------
 check("bundleId wins over term map",
       FocusSupport.hostBundleId(of: session(term: "vscode", bundleId: "com.jetbrains.intellij")) == "com.jetbrains.intellij")
 check("term map used without bundleId",
       FocusSupport.hostBundleId(of: session(term: "zed")) == "dev.zed.Zed")
 check("nil for unknown host", FocusSupport.hostBundleId(of: session(term: "mystery")) == nil)
+check("arbitrary bundleId rejected, term map wins",
+      FocusSupport.hostBundleId(of: session(term: "vscode", bundleId: "com.apple.Calculator")) == "com.microsoft.VSCode")
+check("arbitrary bundleId alone -> nil",
+      FocusSupport.hostBundleId(of: session(bundleId: "com.evil.launcher")) == nil)
+check("allowlist accepts terminals", FocusSupport.isAllowedHost("com.mitchellh.ghostty"))
+check("allowlist accepts JetBrains prefix", FocusSupport.isAllowedHost("com.jetbrains.pycharm.ce"))
+check("allowlist accepts Xcode", FocusSupport.isAllowedHost("com.apple.dt.Xcode"))
+check("allowlist rejects others", !FocusSupport.isAllowedHost("com.apple.Safari"))
 
 // --- strategy fall-through on invalid/missing fields --------------------------------
 check("tmux: no pane -> false", !TmuxFocusStrategy().attempt(session(term: "tmux")))
@@ -65,7 +73,11 @@ check("workspace: missing cwd on disk -> false",
       !WorkspaceFolderFocusStrategy().attempt(session(term: "vscode", cwd: "/no/such/dir")))
 check("workspace: wrong term -> false",
       !WorkspaceFolderFocusStrategy().attempt(session(term: "Apple_Terminal", cwd: "/tmp")))
+check("workspace: editor not running -> false",
+      !WorkspaceFolderFocusStrategy().attempt(session(term: "zed", cwd: "/tmp")))
 check("fallback: unknown host -> false", !AppActivationFallbackStrategy().attempt(session(term: "mystery")))
+check("fallback: spoofed bundleId not activated",
+      !AppActivationFallbackStrategy().attempt(session(bundleId: "com.apple.Calculator")))
 
 print(failures == 0 ? "\nAll focus logic tests passed." : "\n\(failures) test(s) failed.")
 exit(failures == 0 ? 0 : 1)

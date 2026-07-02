@@ -13,6 +13,12 @@ final class TerminalLauncher {
     /// this queue and individual strategies hop to main where required.
     private let queue = DispatchQueue(label: "studio.vanta.claudelights.focus", qos: .userInitiated)
 
+    /// One focus attempt at a time: a hung terminal can hold the chain for
+    /// several subprocess timeouts, and impatient re-clicks must be dropped
+    /// rather than queue up behind it.
+    private let inFlight = NSLock()
+    private var isFocusing = false
+
     private let strategies: [FocusStrategy] = [
         TmuxFocusStrategy(),
         WezTermFocusStrategy(),
@@ -24,7 +30,21 @@ final class TerminalLauncher {
 
     /// Focuses the session, preferring its exact pane/window.
     func focus(session: SessionStatus) {
+        inFlight.lock()
+        let busy = isFocusing
+        if !busy { isFocusing = true }
+        inFlight.unlock()
+        if busy {
+            NSLog("ClaudeLights: focus already in progress, ignoring click")
+            return
+        }
+
         queue.async { [strategies] in
+            defer {
+                self.inFlight.lock()
+                self.isFocusing = false
+                self.inFlight.unlock()
+            }
             for strategy in strategies {
                 if strategy.attempt(session) {
                     NSLog("ClaudeLights: focused \(session.shortSessionId) via \(type(of: strategy))")
