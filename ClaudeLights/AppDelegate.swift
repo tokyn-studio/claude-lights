@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 /// Wires together preferences, the file watcher, the session store, the
 /// observable model, and the status bar UI.
@@ -14,9 +15,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let history = SessionHistory()
     private let usage = UsageStats()
     private let updater = Updater()
+    private let installer = HookInstaller()
     private lazy var model = AppModel(preferences: preferences)
+    private lazy var demo = DemoSessionSimulator(statusURL: statusURL)
+    private lazy var onboarding = OnboardingController(model: model)
     private var controller: StatusController?
     private var watcher: FileWatcher?
+    private var cancellables: Set<AnyCancellable> = []
 
     /// Periodically re-reads the file so stale sessions expire even when no hook
     /// fires (i.e. when the file itself is not changing).
@@ -35,7 +40,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             else { return }
             self.terminalLauncher.focus(session: session)
         }
-        notifications.requestAuthorization()
 
         // Removing sessions rewrites the status file, then reloads.
         model.removeHandler = { [weak self] session in
@@ -55,6 +59,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.updater.checkForUpdates()
         }
 
+        // Hook wiring: mirror the installer state into the model and route the
+        // install/uninstall/demo/onboarding intents.
+        installer.$status
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in self?.model.hookStatus = status }
+            .store(in: &cancellables)
+        model.installHooksHandler = { [weak self] in try self?.installer.install() }
+        model.uninstallHooksHandler = { [weak self] in try self?.installer.uninstall() }
+        model.openSettingsFileHandler = { [weak self] in
+            guard let self else { return }
+            NSWorkspace.shared.open(self.installer.settingsFileURL)
+        }
+        model.enableNotificationsHandler = { [weak self] in
+            self?.notifications.requestAuthorizationOrOpenSettings()
+        }
+        model.runDemoHandler = { [weak self] in self?.demo.run() }
+        model.showOnboardingHandler = { [weak self] in self?.onboarding.show() }
+
+        // Keep the installed helper in sync with the bundled one (app updates)
+        // and detect the current wiring state.
+        installer.ensureHelperCurrent()
+        installer.refreshStatus()
+
         controller = StatusController(model: model, history: history, usage: usage)
 
         // Show an initial state before any file event arrives.
@@ -70,9 +97,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cleanupTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.reload()
         }
+
+        // First run: greet the user and offer one-click hook installation.
+        // Read the installer state directly (the Combine mirror into the model
+        // delivers asynchronously) and defer the notification permission
+        // prompt to the onboarding step that explains it — macOS never
+        // re-prompts after a denial, so the first ask must not be a surprise.
+        let needsOnboarding = !onboarding.hasCompletedOnboarding && installer.status != .installed
+        if needsOnboarding {
+            onboarding.show()
+        } else {
+            notifications.requestAuthorization()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        demo.cancel()
         cleanupTimer?.invalidate()
         watcher?.stop()
     }

@@ -27,6 +27,24 @@ final class AppModel: ObservableObject {
     /// Whether the "Check for Updates…" control should be shown (Sparkle linked).
     @Published var canCheckForUpdates = false
 
+    /// Current state of the Claude Code hook wiring, mirrored from the installer.
+    @Published var hookStatus: HookInstallStatus = .unknown
+    /// The last install/uninstall failure, shown inline in onboarding/settings.
+    @Published var lastHookActionError: String?
+
+    /// Invoked to install (or repair/migrate) the hook wiring.
+    var installHooksHandler: (() throws -> Void)?
+    /// Invoked to remove our hook entries from settings.json.
+    var uninstallHooksHandler: (() throws -> Void)?
+    /// Invoked to reveal settings.json (when it cannot be parsed).
+    var openSettingsFileHandler: (() -> Void)?
+    /// Invoked to (re-)request notification permission.
+    var enableNotificationsHandler: (() -> Void)?
+    /// Invoked to run the simulated demo session.
+    var runDemoHandler: (() -> Void)?
+    /// Invoked to reopen the welcome window.
+    var showOnboardingHandler: (() -> Void)?
+
     init(preferences: Preferences) {
         self.preferences = preferences
         self.startsAtLogin = loginItem.isEnabled
@@ -58,6 +76,40 @@ final class AppModel: ObservableObject {
 
     func checkForUpdates() {
         checkForUpdatesHandler?()
+    }
+
+    func installHooks() {
+        do {
+            try installHooksHandler?()
+            lastHookActionError = nil
+        } catch {
+            lastHookActionError = error.localizedDescription
+        }
+    }
+
+    func uninstallHooks() {
+        do {
+            try uninstallHooksHandler?()
+            lastHookActionError = nil
+        } catch {
+            lastHookActionError = error.localizedDescription
+        }
+    }
+
+    func openSettingsFile() {
+        openSettingsFileHandler?()
+    }
+
+    func enableNotifications() {
+        enableNotificationsHandler?()
+    }
+
+    func runDemo() {
+        runDemoHandler?()
+    }
+
+    func showOnboarding() {
+        showOnboardingHandler?()
     }
 
     /// True when at least one session is finished (enables "Clear finished").

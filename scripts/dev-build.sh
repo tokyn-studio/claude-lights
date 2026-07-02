@@ -26,6 +26,12 @@ swiftc -O -o "$APP/Contents/MacOS/ClaudeLights" \
   -sdk "$SDK" \
   "$ROOT"/ClaudeLights/*.swift
 
+# Compile the bundled hook helper (replaces the jq-based shell hooks).
+mkdir -p "$APP/Contents/Helpers"
+swiftc -O -o "$APP/Contents/Helpers/claudelights-hook" \
+  -sdk "$SDK" \
+  "$ROOT"/ClaudeLightsHook/*.swift
+
 # Concrete Info.plist (the source Info.plist uses Xcode build variables).
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

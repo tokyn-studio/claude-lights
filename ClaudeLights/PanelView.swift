@@ -339,6 +339,12 @@ private struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Text("Claude Code Hooks")
+                .font(.subheadline).bold()
+            hooksSection
+
+            Divider().padding(.vertical, 4)
+
             Text("Notifications")
                 .font(.subheadline).bold()
             Toggle(isOn: $preferences.notifyNeedsInput) { Text("When a session needs input") }
@@ -390,5 +396,63 @@ private struct SettingsView: View {
         .controlSize(.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
+    }
+
+    /// Hook wiring status with the matching action (install/repair/migrate/
+    /// uninstall) and a way back into the welcome window.
+    @ViewBuilder
+    private var hooksSection: some View {
+        switch model.hookStatus {
+        case .installed:
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("Installed").font(.caption)
+                Spacer()
+                Button { model.uninstallHooks() } label: {
+                    Text("Uninstall…").font(.caption)
+                }
+                .buttonStyle(.link)
+            }
+        case .settingsUnreadable:
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text("settings.json could not be parsed").font(.caption)
+                }
+                Button { model.openSettingsFile() } label: {
+                    Text("Open settings.json").font(.caption)
+                }
+                .buttonStyle(.link)
+            }
+        case .legacyShellHooks:
+            hookActionRow(label: "Legacy shell hooks found", action: "Migrate")
+        case .needsRepair:
+            hookActionRow(label: "Needs repair", action: "Repair")
+        case .notInstalled, .unknown:
+            hookActionRow(label: "Not installed", action: "Install")
+        }
+
+        if let error = model.lastHookActionError {
+            Text(error).font(.caption).foregroundStyle(.red)
+        }
+        Button { model.showOnboarding() } label: {
+            Text("Show welcome window").font(.caption)
+        }
+        .buttonStyle(.link)
+    }
+
+    private func hookActionRow(label: LocalizedStringKey, action: LocalizedStringKey) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "circle.dashed")
+                .foregroundStyle(.secondary)
+            Text(label).font(.caption)
+            Spacer()
+            Button { model.installHooks() } label: {
+                Text(action).font(.caption)
+            }
+            .controlSize(.small)
+        }
     }
 }

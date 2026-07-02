@@ -89,3 +89,17 @@ xcrun stapler staple "$DMG"
 echo ""
 echo "Done: $DMG"
 echo "Verify with: spctl -a -vv -t open --context context:primary-signature \"$DMG\""
+
+# Emit the Homebrew cask stanza for the tap (version from the built app).
+VERSION="$(defaults read "$APP/Contents/Info" CFBundleShortVersionString)"
+SHA256="$(shasum -a 256 "$DMG" | cut -d' ' -f1)"
+CASK_OUT="$ROOT/build/claudelights.rb"
+sed -e "s/^  version \".*\"/  version \"$VERSION\"/" \
+    -e "s/^  sha256 \".*\"/  sha256 \"$SHA256\"/" \
+    "$ROOT/packaging/homebrew/claudelights.rb" > "$CASK_OUT"
+echo ""
+echo "Homebrew cask written to: $CASK_OUT"
+echo "  version: $VERSION"
+echo "  sha256:  $SHA256"
+echo "Copy it to the tap repo as Casks/claudelights.rb after uploading the DMG"
+echo "and appcast.xml to the GitHub release (see scripts/sparkle-appcast.sh)."

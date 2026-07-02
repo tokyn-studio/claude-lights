@@ -24,6 +24,23 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// Requests permission — or, if the user previously denied it, opens the
+    /// System Settings notifications pane instead, because macOS never shows
+    /// the permission dialog a second time.
+    func requestAuthorizationOrOpenSettings() {
+        center.getNotificationSettings { [weak self] settings in
+            DispatchQueue.main.async {
+                if settings.authorizationStatus == .denied {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } else {
+                    self?.requestAuthorization()
+                }
+            }
+        }
+    }
+
     /// Posts a notification describing a session's new state.
     func notify(session: SessionStatus) {
         let content = UNMutableNotificationContent()
