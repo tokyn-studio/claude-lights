@@ -53,6 +53,19 @@ struct SessionStatus: Codable {
     let activeSeconds: Double?
     /// When this entry was last updated. Used for stale-session cleanup.
     let timestamp: Date
+    /// Full working directory of the session, if captured.
+    let cwd: String?
+    /// Bundle id of the hosting app (from `__CFBundleIdentifier`), if captured.
+    /// Identifies the terminal/IDE even when `TERM_PROGRAM` is absent.
+    let bundleId: String?
+    /// tmux pane id (e.g. "%5"), if the session runs inside tmux.
+    let tmuxPane: String?
+    /// WezTerm pane id, if the session runs inside WezTerm.
+    let weztermPane: String?
+    /// kitty window id, if the session runs inside kitty.
+    let kittyWindowId: String?
+    /// kitty remote-control socket (from `KITTY_LISTEN_ON`), if configured.
+    let kittyListenOn: String?
 
     enum CodingKeys: String, CodingKey {
         case state
@@ -63,6 +76,12 @@ struct SessionStatus: Codable {
         case started
         case activeSeconds = "active_seconds"
         case timestamp
+        case cwd
+        case bundleId = "bundle_id"
+        case tmuxPane = "tmux_pane"
+        case weztermPane = "wezterm_pane"
+        case kittyWindowId = "kitty_window_id"
+        case kittyListenOn = "kitty_listen_on"
     }
 
     /// A short, stable label for the session when no project name is available.

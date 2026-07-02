@@ -27,6 +27,8 @@
 		1A0000000000000000000D03 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000D02 /* Sparkle */; };
 		1A00000000000000000000B7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000000A7 /* Assets.xcassets */; };
 		1A00000000000000000000B8 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000000A8 /* Localizable.xcstrings */; };
+		2A00000000000000000000B0 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A00000000000000000000A0 /* main.swift */; };
+		2A00000000000000000000B1 /* claudelights-hook in Embed Helpers */ = {isa = PBXBuildFile; fileRef = 2A00000000000000000000AF /* claudelights-hook */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +53,8 @@
 		1A00000000000000000000A8 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		1A00000000000000000000A9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		1A00000000000000000000AF /* ClaudeLights.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeLights.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A00000000000000000000A0 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		2A00000000000000000000AF /* claudelights-hook */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "claudelights-hook"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -62,7 +66,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2A00000000000000000000F2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2A00000000000000000000F5 /* Embed Helpers */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "Contents/Helpers";
+			dstSubfolderSpec = 1;
+			files = (
+				2A00000000000000000000B1 /* claudelights-hook in Embed Helpers */,
+			);
+			name = "Embed Helpers";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXGroup section */
 		1A00000000000000000000C2 /* ClaudeLights */ = {
@@ -92,10 +117,19 @@
 			path = ClaudeLights;
 			sourceTree = "<group>";
 		};
+		2A00000000000000000000C2 /* ClaudeLightsHook */ = {
+			isa = PBXGroup;
+			children = (
+				2A00000000000000000000A0 /* main.swift */,
+			);
+			path = ClaudeLightsHook;
+			sourceTree = "<group>";
+		};
 		1A00000000000000000000C0 /* mainGroup */ = {
 			isa = PBXGroup;
 			children = (
 				1A00000000000000000000C2 /* ClaudeLights */,
+				2A00000000000000000000C2 /* ClaudeLightsHook */,
 				1A00000000000000000000C1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -104,6 +138,7 @@
 			isa = PBXGroup;
 			children = (
 				1A00000000000000000000AF /* ClaudeLights.app */,
+				2A00000000000000000000AF /* claudelights-hook */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -118,10 +153,12 @@
 				1A00000000000000000000F0 /* Sources */,
 				1A00000000000000000000F2 /* Frameworks */,
 				1A00000000000000000000F1 /* Resources */,
+				2A00000000000000000000F5 /* Embed Helpers */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				2A00000000000000000000D5 /* PBXTargetDependency */,
 			);
 			name = ClaudeLights;
 			packageProductDependencies = (
@@ -130,6 +167,22 @@
 			productName = ClaudeLights;
 			productReference = 1A00000000000000000000AF /* ClaudeLights.app */;
 			productType = "com.apple.product-type.application";
+		};
+		2A00000000000000000000D0 /* claudelights-hook */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2A00000000000000000000E1 /* Build configuration list for PBXNativeTarget "claudelights-hook" */;
+			buildPhases = (
+				2A00000000000000000000F0 /* Sources */,
+				2A00000000000000000000F2 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "claudelights-hook";
+			productName = "claudelights-hook";
+			productReference = 2A00000000000000000000AF /* claudelights-hook */;
+			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
 
@@ -142,6 +195,9 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					1A00000000000000000000D0 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					2A00000000000000000000D0 = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
@@ -163,9 +219,28 @@
 			projectRoot = "";
 			targets = (
 				1A00000000000000000000D0 /* ClaudeLights */,
+				2A00000000000000000000D0 /* claudelights-hook */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXContainerItemProxy section */
+		2A00000000000000000000D6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1A00000000000000000000CF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2A00000000000000000000D0;
+			remoteInfo = "claudelights-hook";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		2A00000000000000000000D5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2A00000000000000000000D0 /* claudelights-hook */;
+			targetProxy = 2A00000000000000000000D6 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		1A00000000000000000000F1 /* Resources */ = {
@@ -201,6 +276,14 @@
 				1A0000000000000000000BB8 /* Updater.swift in Sources */,
 				1A0000000000000000000BB9 /* UsageStats.swift in Sources */,
 				1A0000000000000000000BBA /* AttentionSound.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A00000000000000000000F0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2A00000000000000000000B0 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -301,6 +384,32 @@
 			};
 			name = Release;
 		};
+		2A00000000000000000000E4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		2A00000000000000000000E5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -318,6 +427,15 @@
 			buildConfigurations = (
 				1A00000000000000000000E4 /* Debug */,
 				1A00000000000000000000E5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2A00000000000000000000E1 /* Build configuration list for PBXNativeTarget "claudelights-hook" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2A00000000000000000000E4 /* Debug */,
+				2A00000000000000000000E5 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
