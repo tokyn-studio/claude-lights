@@ -55,17 +55,20 @@ func controllingTTY() -> String? {
     return nil
 }
 
-func loadSessions(from url: URL) -> [String: [String: Any]] {
+/// The full top-level object of the status file. Values other than session
+/// dictionaries (added by users or other tools) are preserved verbatim, like
+/// the legacy jq merge did. A missing, corrupt, or non-object file yields {}.
+func loadRoot(from url: URL) -> [String: Any] {
     guard let data = try? Data(contentsOf: url),
           let object = try? JSONSerialization.jsonObject(with: data),
-          let map = object as? [String: [String: Any]]
+          let map = object as? [String: Any]
     else { return [:] }
     return map
 }
 
 /// Writes to a temp file in the same directory, then atomically renames it
 /// into place so readers never observe a half-written file.
-func atomicWrite(_ sessions: [String: [String: Any]], to url: URL) {
+func atomicWrite(_ sessions: [String: Any], to url: URL) {
     guard let data = try? JSONSerialization.data(
         withJSONObject: sessions, options: [.prettyPrinted, .sortedKeys]
     ) else { return }
@@ -118,16 +121,16 @@ func run() {
     if state == "remove" {
         guard FileManager.default.fileExists(atPath: statusURL.path) else { return }
         guard let data = try? Data(contentsOf: statusURL),
-              (try? JSONSerialization.jsonObject(with: data)) as? [String: [String: Any]] != nil
+              (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] != nil
         else { return }
-        var sessions = loadSessions(from: statusURL)
-        sessions.removeValue(forKey: sessionId)
-        atomicWrite(sessions, to: statusURL)
+        var root = loadRoot(from: statusURL)
+        root.removeValue(forKey: sessionId)
+        atomicWrite(root, to: statusURL)
         return
     }
 
-    var sessions = loadSessions(from: statusURL)
-    let existing = sessions[sessionId] ?? [:]
+    var root = loadRoot(from: statusURL)
+    let existing = root[sessionId] as? [String: Any] ?? [:]
 
     let now = Date()
     let timestamp = iso8601.string(from: now)
@@ -194,8 +197,8 @@ func run() {
         if let value = env[envVar], !value.isEmpty { entry[key] = value }
     }
 
-    sessions[sessionId] = entry
-    atomicWrite(sessions, to: statusURL)
+    root[sessionId] = entry
+    atomicWrite(root, to: statusURL)
 }
 
 // A hook must never fail Claude Code: exit 0 on every path.

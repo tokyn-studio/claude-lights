@@ -58,8 +58,8 @@ active_seconds_match() {
   local sids sid av bv
   sids="$(jq -r 'keys[]' "$A" 2>/dev/null)" || return 0
   for sid in $sids; do
-    av="$(jq -r --arg s "$sid" '.[$s].active_seconds // 0' "$A")"
-    bv="$(jq -r --arg s "$sid" '.[$s].active_seconds // 0' "$B" 2>/dev/null || echo missing)"
+    av="$(jq -r --arg s "$sid" '(.[$s] | objects | .active_seconds) // 0' "$A")"
+    bv="$(jq -r --arg s "$sid" '(.[$s] | objects | .active_seconds) // 0' "$B" 2>/dev/null || echo missing)"
     [ "$bv" = "missing" ] && return 1
     local diff=$(( ${av%.*} - ${bv%.*} ))
     [ "${diff#-}" -le 1 ] || return 1
@@ -165,6 +165,14 @@ check "missing session_id (no write)"
 new_case c12
 apply working '{"session_id":"s3"}'
 check "missing cwd (project null)"
+
+# --- Case 13: foreign top-level values survive the merge --------------------
+new_case c13
+printf '{"version": 2, "note": "keep me"}' > "$A"
+printf '{"version": 2, "note": "keep me"}' > "$B"
+apply working "$P1"
+apply done "$P1"
+check "foreign top-level values preserved"
 
 echo
 if [ "$FAILURES" -gt 0 ]; then

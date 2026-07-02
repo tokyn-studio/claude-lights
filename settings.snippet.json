@@ -1,12 +1,12 @@
 {
-  "//": "ClaudeLights hook wiring for MANUAL setup. Prefer the in-app installer (open ClaudeLights -> Install Hooks), which writes exactly these entries. The helper binary is installed by the app to ~/Library/Application Support/ClaudeLights/. Merge the \"hooks\" object below into your ~/.claude/settings.json; $HOME is expanded by the shell, and the double quotes keep the space in 'Application Support' intact.",
+  "//": "ClaudeLights hook wiring for MANUAL setup. Prefer the in-app installer (open ClaudeLights -> Install Hooks), which writes equivalent entries. The helper binary is installed by the app to ~/Library/Application Support/ClaudeLights/. Merge the \"hooks\" object below into your ~/.claude/settings.json. The [ -x ... ] guard makes each hook a silent no-op if the helper is ever removed; $HOME is expanded by the shell and the double quotes keep the space in 'Application Support' intact.",
   "hooks": {
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" working"
+            "command": "[ -x \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" ] && \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" working || true"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" resume"
+            "command": "[ -x \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" ] && \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" resume || true"
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" done"
+            "command": "[ -x \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" ] && \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" done || true"
           }
         ]
       }
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" compacting"
+            "command": "[ -x \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" ] && \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" compacting || true"
           }
         ]
       }
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" needs_input"
+            "command": "[ -x \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" ] && \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" needs_input || true"
           }
         ]
       }
@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" remove"
+            "command": "[ -x \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" ] && \"$HOME/Library/Application Support/ClaudeLights/claudelights-hook\" remove || true"
           }
         ]
       }

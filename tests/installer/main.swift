@@ -188,5 +188,79 @@ do {
     check("backups pruned to 3", backups.count == 3, "\(backups.count)")
 }
 
+// --- 9: unrecognized foreign shapes are preserved verbatim ---------------------
+do {
+    let sandbox = makeSandbox()
+    let weird = """
+    {"hooks": {"Stop": [{"hooks": "run-me-somehow"}, {"note": "no hooks key"}],
+     "SessionStart": []}}
+    """
+    try weird.data(using: .utf8)!.write(to: sandbox.settings)
+    let installer = makeInstaller(sandbox)
+    try installer.install()
+    var result = json(sandbox.settings)
+    var stop = (result["hooks"] as? [String: Any])?["Stop"] as? [Any] ?? []
+    check("weird-shaped foreign groups survive install",
+          stop.contains { ($0 as? [String: Any])?["hooks"] as? String == "run-me-somehow" }
+          && stop.contains { ($0 as? [String: Any])?["note"] as? String == "no hooks key" },
+          "\(stop)")
+    try installer.uninstall()
+    result = json(sandbox.settings)
+    stop = (result["hooks"] as? [String: Any])?["Stop"] as? [Any] ?? []
+    check("weird-shaped foreign groups survive uninstall", stop.count == 2, "\(stop)")
+    let sessionStart = (result["hooks"] as? [String: Any])?["SessionStart"] as? [Any]
+    check("foreign empty event array survives uninstall", sessionStart != nil)
+}
+
+// --- 10: legacy hooks in a renamed directory are still migrated ----------------
+do {
+    let sandbox = makeSandbox()
+    let legacy = """
+    {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "'/Users/x/Downloads/claude-lights-main/hooks/done.sh'"}]}]}}
+    """
+    try legacy.data(using: .utf8)!.write(to: sandbox.settings)
+    let installer = makeInstaller(sandbox)
+    installer.refreshStatus()
+    check("renamed-dir legacy detected", installer.status == .legacyShellHooks)
+    try installer.install()
+    let cmds = commands(in: json(sandbox.settings))
+    check("renamed-dir legacy removed", !cmds.contains { $0.contains("hooks/done.sh") })
+}
+
+// --- 11: restrictive settings.json permissions survive the rewrite -------------
+do {
+    let sandbox = makeSandbox()
+    try "{}".data(using: .utf8)!.write(to: sandbox.settings)
+    try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: sandbox.settings.path)
+    let installer = makeInstaller(sandbox)
+    try installer.install()
+    let mode = (try fm.attributesOfItem(atPath: sandbox.settings.path)[.posixPermissions] as? NSNumber)?.intValue
+    check("chmod 600 preserved", mode == 0o600, String(mode ?? -1, radix: 8))
+}
+
+// --- 12: helper path with a single quote produces a shell-parseable command ----
+do {
+    let sandbox = makeSandbox()
+    let quotedDir = sandbox.dir.appendingPathComponent("o'brien helpers")
+    let installer = HookInstaller(settingsURL: sandbox.settings,
+                                  helperDirectory: quotedDir,
+                                  bundledHelperURL: helperBinary)
+    try installer.install()
+    let cmds = commands(in: json(sandbox.settings))
+    check("guard + no-op form", cmds.allSatisfy { $0.hasPrefix("[ -x ") && $0.hasSuffix("|| true") })
+    var parseable = true
+    for command in cmds {
+        let script = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("cmd-\(UUID().uuidString).sh")
+        try command.data(using: .utf8)!.write(to: script)
+        let sh = Process()
+        sh.executableURL = URL(fileURLWithPath: "/bin/sh")
+        sh.arguments = ["-n", script.path]
+        try sh.run()
+        sh.waitUntilExit()
+        if sh.terminationStatus != 0 { parseable = false }
+    }
+    check("apostrophe path shell-parseable", parseable, "\(cmds.first ?? "")")
+}
+
 print(failures == 0 ? "\nAll installer fixture tests passed." : "\n\(failures) test(s) failed.")
 exit(failures == 0 ? 0 : 1)

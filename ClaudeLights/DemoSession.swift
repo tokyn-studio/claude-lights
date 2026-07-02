@@ -79,6 +79,17 @@ final class DemoSessionSimulator {
     }
 
     private func mutate(_ transform: (inout [String: Any]) -> Void) {
+        // Take the same lock as the hook helper so a real hook event landing
+        // mid-demo is never reverted by our read-modify-write.
+        let lockFD = open(statusURL.path + ".lock", O_CREAT | O_RDWR, 0o644)
+        if lockFD >= 0 { flock(lockFD, LOCK_EX) }
+        defer {
+            if lockFD >= 0 {
+                flock(lockFD, LOCK_UN)
+                close(lockFD)
+            }
+        }
+
         var sessions: [String: Any] = [:]
         if let data = try? Data(contentsOf: statusURL),
            let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {

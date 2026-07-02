@@ -40,7 +40,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             else { return }
             self.terminalLauncher.focus(session: session)
         }
-        notifications.requestAuthorization()
 
         // Removing sessions rewrites the status file, then reloads.
         model.removeHandler = { [weak self] session in
@@ -73,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSWorkspace.shared.open(self.installer.settingsFileURL)
         }
         model.enableNotificationsHandler = { [weak self] in
-            self?.notifications.requestAuthorization()
+            self?.notifications.requestAuthorizationOrOpenSettings()
         }
         model.runDemoHandler = { [weak self] in self?.demo.run() }
         model.showOnboardingHandler = { [weak self] in self?.onboarding.show() }
@@ -100,7 +99,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // First run: greet the user and offer one-click hook installation.
-        onboarding.showIfNeeded()
+        // Read the installer state directly (the Combine mirror into the model
+        // delivers asynchronously) and defer the notification permission
+        // prompt to the onboarding step that explains it — macOS never
+        // re-prompts after a denial, so the first ask must not be a surprise.
+        let needsOnboarding = !onboarding.hasCompletedOnboarding && installer.status != .installed
+        if needsOnboarding {
+            onboarding.show()
+        } else {
+            notifications.requestAuthorization()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

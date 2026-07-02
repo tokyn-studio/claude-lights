@@ -14,15 +14,11 @@ final class OnboardingController {
         self.model = model
     }
 
+    /// First-run rule (checked by AppDelegate): show until completed, unless
+    /// hooks are already wired — users who set up manually shouldn't be
+    /// greeted like newcomers.
     var hasCompletedOnboarding: Bool {
         UserDefaults.standard.bool(forKey: Self.completedKey)
-    }
-
-    /// Shows the window on first run: never completed AND hooks not installed
-    /// (users who wired hooks manually shouldn't be greeted like newcomers).
-    func showIfNeeded() {
-        guard !hasCompletedOnboarding, model.hookStatus != .installed else { return }
-        show()
     }
 
     func show() {

@@ -30,6 +30,7 @@ enum HookInstallStatus: Equatable {
 enum HookInstallError: LocalizedError {
     case settingsUnreadable(String)
     case bundledHelperMissing
+    case helperInstallFailed(String)
     case writeFailed(String)
 
     var errorDescription: String? {
@@ -38,6 +39,8 @@ enum HookInstallError: LocalizedError {
             return String(localized: "settings.json could not be parsed (\(detail)). Fix it manually, then try again.")
         case .bundledHelperMissing:
             return String(localized: "The hook helper is missing from the app bundle. Reinstall ClaudeLights.")
+        case .helperInstallFailed(let path):
+            return String(localized: "Could not install the hook helper to \(path). Check disk space and permissions, then try again.")
         case .writeFailed(let detail):
             return String(localized: "Could not write settings.json (\(detail)).")
         }
@@ -115,10 +118,33 @@ final class HookInstaller: ObservableObject {
         command.contains(Self.helperName)
     }
 
-    /// Does this hook command point at the deprecated shell scripts shipped in
-    /// the repository (`…/claude-lights/hooks/*.sh`)?
+    /// The event wrapper scripts shipped in the repository's `hooks/` folder.
+    private static let legacyScriptNames = [
+        "working.sh", "resume.sh", "done.sh", "compacting.sh",
+        "needs_input.sh", "ended.sh", "update-status.sh",
+    ]
+
+    /// Does this hook command point at the deprecated shell scripts? Matched
+    /// by `hooks/<script>` rather than the repo folder name, so clones and
+    /// downloads in renamed directories (e.g. `claude-lights-main`) are
+    /// recognized and migrated too.
     private func isLegacyCommand(_ command: String) -> Bool {
-        command.contains("claude-lights/hooks/") && command.contains(".sh")
+        Self.legacyScriptNames.contains { command.contains("/hooks/\($0)") }
+    }
+
+    /// POSIX single-quoting that survives quotes inside the path itself
+    /// (`/Users/o'brien/…`).
+    private func shellQuote(_ path: String) -> String {
+        "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// The command written into settings.json. The existence guard makes the
+    /// hook a silent no-op if the helper is ever removed without uninstalling
+    /// the wiring (e.g. `brew uninstall --zap`), instead of failing every
+    /// Claude Code event.
+    private func hookCommand(verb: String) -> String {
+        let quoted = shellQuote(installedHelperURL.path)
+        return "[ -x \(quoted) ] && \(quoted) \(verb) || true"
     }
 
     func refreshStatus() {
@@ -218,15 +244,31 @@ final class HookInstaller: ObservableObject {
             throw HookInstallError.bundledHelperMissing
         }
         ensureHelperCurrent()
+        // Never wire settings.json to a helper that failed to install.
+        guard fileManager.isExecutableFile(atPath: installedHelperURL.path) else {
+            throw HookInstallError.helperInstallFailed(helperDirectory.path)
+        }
 
         var settings = try readSettingsOrEmpty()
+
+        // Refuse to rewrite structures we don't understand rather than
+        // guessing and losing someone else's configuration.
+        if let hooksValue = settings["hooks"], !(hooksValue is [String: Any]) {
+            throw HookInstallError.settingsUnreadable("\"hooks\" is not an object")
+        }
+        var hooks = settings["hooks"] as? [String: Any] ?? [:]
+        for wiring in Self.wirings {
+            if let value = hooks[wiring.event], !(value is [Any]) {
+                throw HookInstallError.settingsUnreadable("hooks.\(wiring.event) is not an array")
+            }
+        }
+
         try backupSettingsIfPresent()
 
-        var hooks = settings["hooks"] as? [String: Any] ?? [:]
         for wiring in Self.wirings {
             var groups = removingOurEntries(from: hooks[wiring.event])
             var group: [String: Any] = [
-                "hooks": [["type": "command", "command": "'\(installedHelperURL.path)' \(wiring.verb)"]],
+                "hooks": [["type": "command", "command": hookCommand(verb: wiring.verb)]],
             ]
             if let matcher = wiring.matcher { group["matcher"] = matcher }
             groups.append(group)
@@ -250,11 +292,17 @@ final class HookInstaller: ObservableObject {
 
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
         for event in hooks.keys {
-            let groups = removingOurEntries(from: hooks[event])
-            if groups.isEmpty {
+            let cleaned = removingOurEntries(from: hooks[event])
+            // Leave events we didn't actually change byte-identical (including
+            // shapes we don't understand and foreign empty arrays).
+            if let original = hooks[event] as? NSArray, original.isEqual(to: cleaned) {
+                continue
+            }
+            guard hooks[event] is [Any] else { continue }
+            if cleaned.isEmpty {
                 hooks.removeValue(forKey: event)
             } else {
-                hooks[event] = groups
+                hooks[event] = cleaned
             }
         }
         if hooks.isEmpty {
@@ -268,15 +316,23 @@ final class HookInstaller: ObservableObject {
     }
 
     /// Strips our commands (current helper and legacy scripts) out of one
-    /// event's matcher groups, dropping groups left with no hooks.
-    private func removingOurEntries(from value: Any?) -> [[String: Any]] {
-        var result: [[String: Any]] = []
-        for var group in value as? [[String: Any]] ?? [] {
-            let kept = (group["hooks"] as? [[String: Any]] ?? []).filter { hook in
+    /// event's matcher groups. Groups whose shape we don't recognize are kept
+    /// verbatim — this must never delete configuration we don't own — and a
+    /// group is only dropped when removing our hooks left it empty.
+    private func removingOurEntries(from value: Any?) -> [Any] {
+        var result: [Any] = []
+        for element in value as? [Any] ?? [] {
+            guard var group = element as? [String: Any],
+                  let hookList = group["hooks"] as? [[String: Any]]
+            else {
+                result.append(element)
+                continue
+            }
+            let kept = hookList.filter { hook in
                 guard let command = hook["command"] as? String else { return true }
                 return !isOurCommand(command) && !isLegacyCommand(command)
             }
-            if kept.isEmpty { continue }
+            if kept.isEmpty, kept.count != hookList.count { continue }
             group["hooks"] = kept
             result.append(group)
         }
@@ -322,9 +378,15 @@ final class HookInstaller: ObservableObject {
         let target = writeTargetURL
         do {
             try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // Preserve the file's permissions (settings.json can hold secrets
+            // like apiKeyHelper output; a chmod 600 must survive the rewrite).
+            let existingPermissions = (try? fileManager.attributesOfItem(atPath: target.path))?[.posixPermissions] as? NSNumber
             let tmp = target.deletingLastPathComponent()
                 .appendingPathComponent(".\(target.lastPathComponent).claudelights.tmp")
             try data.write(to: tmp)
+            try fileManager.setAttributes(
+                [.posixPermissions: existingPermissions ?? NSNumber(value: 0o600)],
+                ofItemAtPath: tmp.path)
             guard rename(tmp.path, target.path) == 0 else {
                 try? fileManager.removeItem(at: tmp)
                 throw HookInstallError.writeFailed(String(cString: strerror(errno)))

@@ -32,5 +32,10 @@ cask "claudelights" do
     Open ClaudeLights once and click "Install Hooks" to connect it to
     Claude Code (it adds hook entries to ~/.claude/settings.json; a backup
     is kept). Restart any running Claude Code sessions afterwards.
+
+    Before uninstalling for good, click "Uninstall…" under Settings →
+    Claude Code Hooks to remove those entries. If you forget, the leftover
+    hooks are harmless no-ops (each entry checks that the helper binary
+    still exists), but they stay in settings.json until removed manually.
   EOS
 end
