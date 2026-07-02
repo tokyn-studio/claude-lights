@@ -1,15 +1,19 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// Owns the `NSStatusItem` (menu bar icon) and the SwiftUI popover it toggles.
 ///
-/// The icon color reflects the worst session state; the popover hosts
-/// `PanelView` via an `NSHostingController`.
+/// The icon reflects the worst session state in the user's chosen style
+/// (colored dot, emoji, or monochrome template), optionally with a count of
+/// sessions needing input; the popover hosts `PanelView` via an
+/// `NSHostingController`.
 final class StatusController {
     private let statusItem: NSStatusItem
     private let model: AppModel
     private let usage: UsageStats
     private let popover: NSPopover
+    private var cancellables: Set<AnyCancellable> = []
 
     init(model: AppModel, history: SessionHistory, usage: UsageStats) {
         self.model = model
@@ -34,15 +38,55 @@ final class StatusController {
             button.target = self
         }
 
+        // Re-render when icon preferences change (objectWillChange fires
+        // before the new value lands, hence the main-queue hop).
+        model.preferences.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.updateIcon() }
+            .store(in: &cancellables)
+
         updateIcon()
     }
 
-    /// Recomputes the menu bar icon from the model's worst state.
-    /// Falls back to the "all clear" green icon when there are no sessions.
+    /// Recomputes the menu bar icon from the model's worst state and the
+    /// user's icon preferences. Falls back to the "all clear" green icon when
+    /// there are no sessions.
     func updateIcon() {
+        guard let button = statusItem.button else { return }
         let state = model.worstState ?? .done
-        statusItem.button?.image = icon(for: state)
-        statusItem.button?.toolTip = "ClaudeLights"
+        let preferences = model.preferences
+
+        switch preferences.iconStyle {
+        case .coloredDot:
+            button.image = icon(for: state)
+        case .monochrome:
+            button.image = monochromeIcon(for: state)
+        case .emoji:
+            button.image = nil
+        }
+
+        // Badge: how many sessions currently need the user.
+        let needsInputCount = model.sessions.filter { $0.state == .needsInput }.count
+        let badge = (preferences.showNeedsInputCount && needsInputCount > 0) ? " \(needsInputCount)" : ""
+
+        if preferences.iconStyle == .emoji {
+            button.attributedTitle = NSAttributedString(
+                string: state.emoji + badge,
+                attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)])
+            button.imagePosition = .noImage
+        } else if !badge.isEmpty {
+            button.attributedTitle = NSAttributedString(
+                string: badge,
+                attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)])
+            button.imagePosition = .imageLeft
+        } else {
+            button.attributedTitle = NSAttributedString(string: "")
+            button.imagePosition = .imageOnly
+        }
+
+        button.toolTip = needsInputCount > 0
+            ? String(localized: "ClaudeLights — \(needsInputCount) session(s) need input")
+            : "ClaudeLights"
     }
 
     /// Diameter of the menu bar icon, in points.
@@ -72,6 +116,37 @@ final class StatusController {
             return true
         }
         image.isTemplate = false
+        image.accessibilityDescription = state.accessibilityLabel
+        return image
+    }
+
+    /// Template rendering: the state's bare glyph inside a stroked circle,
+    /// tinted by the system like every other menu bar extra. State is conveyed
+    /// by shape alone.
+    private func monochromeIcon(for state: SessionState) -> NSImage {
+        let diameter = iconDiameter
+        let image = NSImage(size: NSSize(width: diameter, height: diameter), flipped: false) { rect in
+            let inset = rect.insetBy(dx: 0.75, dy: 0.75)
+            let circle = NSBezierPath(ovalIn: inset)
+            circle.lineWidth = 1.5
+            NSColor.black.setStroke()
+            circle.stroke()
+
+            let configuration = NSImage.SymbolConfiguration(pointSize: diameter * 0.48, weight: .semibold)
+                .applying(NSImage.SymbolConfiguration(paletteColors: [.black]))
+            if let glyph = NSImage(systemSymbolName: state.barGlyphName, accessibilityDescription: nil)?
+                .withSymbolConfiguration(configuration) {
+                let size = glyph.size
+                glyph.draw(in: NSRect(
+                    x: rect.midX - size.width / 2,
+                    y: rect.midY - size.height / 2,
+                    width: size.width,
+                    height: size.height
+                ))
+            }
+            return true
+        }
+        image.isTemplate = true
         image.accessibilityDescription = state.accessibilityLabel
         return image
     }

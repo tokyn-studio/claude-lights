@@ -345,6 +345,24 @@ private struct SettingsView: View {
 
             Divider().padding(.vertical, 4)
 
+            Text("Menu bar")
+                .font(.subheadline).bold()
+            HStack(spacing: 6) {
+                Text("Icon style").font(.caption)
+                Picker("Icon style", selection: $preferences.iconStyle) {
+                    Text("Colored dot").tag(MenuIconStyle.coloredDot)
+                    Text("Emoji").tag(MenuIconStyle.emoji)
+                    Text("Monochrome").tag(MenuIconStyle.monochrome)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+            }
+            Toggle(isOn: $preferences.showNeedsInputCount) {
+                Text("Show count of sessions needing input")
+            }
+
+            Divider().padding(.vertical, 4)
+
             Text("Notifications")
                 .font(.subheadline).bold()
             Toggle(isOn: $preferences.notifyNeedsInput) { Text("When a session needs input") }

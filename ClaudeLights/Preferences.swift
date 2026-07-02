@@ -1,5 +1,16 @@
 import Foundation
 
+/// How the menu bar status item is rendered.
+enum MenuIconStyle: String, CaseIterable {
+    /// Colored circle with a white glyph (the classic traffic light).
+    case coloredDot
+    /// Plain emoji circle (🟢🟡🔵🔴) — no custom drawing.
+    case emoji
+    /// Template glyph that follows the menu bar tint (for colored-menu-bar
+    /// purists); state is conveyed by shape alone.
+    case monochrome
+}
+
 /// User-facing settings, persisted in `UserDefaults` and observable by SwiftUI.
 ///
 /// Each property writes through to `UserDefaults` on change, so preferences are
@@ -13,6 +24,8 @@ final class Preferences: ObservableObject {
         static let notifyNeedsInput = "notifyNeedsInput"
         static let soundOnNeedsInput = "soundOnNeedsInput"
         static let attentionSound = "attentionSound"
+        static let iconStyle = "iconStyle"
+        static let showNeedsInputCount = "showNeedsInputCount"
     }
 
     @Published var notifyWorking: Bool {
@@ -31,6 +44,14 @@ final class Preferences: ObservableObject {
     @Published var attentionSound: String {
         didSet { defaults.set(attentionSound, forKey: Key.attentionSound) }
     }
+    /// Rendering style of the menu bar icon.
+    @Published var iconStyle: MenuIconStyle {
+        didSet { defaults.set(iconStyle.rawValue, forKey: Key.iconStyle) }
+    }
+    /// Whether a count of needs-input sessions is shown next to the icon.
+    @Published var showNeedsInputCount: Bool {
+        didSet { defaults.set(showNeedsInputCount, forKey: Key.showNeedsInputCount) }
+    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -43,6 +64,8 @@ final class Preferences: ObservableObject {
             Key.notifyNeedsInput: true,
             Key.soundOnNeedsInput: true,
             Key.attentionSound: AttentionSound.defaultName,
+            Key.iconStyle: MenuIconStyle.coloredDot.rawValue,
+            Key.showNeedsInputCount: true,
         ])
 
         notifyWorking = defaults.bool(forKey: Key.notifyWorking)
@@ -50,6 +73,8 @@ final class Preferences: ObservableObject {
         notifyNeedsInput = defaults.bool(forKey: Key.notifyNeedsInput)
         soundOnNeedsInput = defaults.bool(forKey: Key.soundOnNeedsInput)
         attentionSound = defaults.string(forKey: Key.attentionSound) ?? AttentionSound.defaultName
+        iconStyle = defaults.string(forKey: Key.iconStyle).flatMap(MenuIconStyle.init) ?? .coloredDot
+        showNeedsInputCount = defaults.bool(forKey: Key.showNeedsInputCount)
     }
 
     /// Whether a notification should fire for a transition into `state`.

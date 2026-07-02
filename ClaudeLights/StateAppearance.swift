@@ -41,6 +41,16 @@ extension SessionState {
     /// SF Symbol shown for a session that is idle (long done).
     static var idleSymbolName: String { "moon.zzz.fill" }
 
+    /// Emoji rendering of the state for the emoji menu bar style.
+    var emoji: String {
+        switch self {
+        case .done: return "🟢"
+        case .working: return "🟡"
+        case .compacting: return "🔵"
+        case .needsInput: return "🔴"
+        }
+    }
+
     /// Human-readable label used for accessibility descriptions.
     var accessibilityLabel: String {
         switch self {
