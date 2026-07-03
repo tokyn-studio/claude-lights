@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="20" viewBox="0 0 96 20" role="img" aria-label="compacting">
+  <rect width="96" height="20" rx="10" fill="#0a84ff" fill-opacity=".13"/>
+  <circle cx="11" cy="10" r="3.6" fill="#2e90fa"/>
+  <text x="20" y="13.8" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-size="10.5" font-weight="600" fill="#2a7fd4">compacting</text>
+</svg>

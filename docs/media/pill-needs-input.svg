@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20" viewBox="0 0 100 20" role="img" aria-label="needs input">
+  <rect width="100" height="20" rx="10" fill="#ff453a" fill-opacity=".13"/>
+  <circle cx="11" cy="10" r="3.6" fill="#e5484d"/>
+  <text x="20" y="13.8" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-size="10.5" font-weight="600" fill="#d63c41">needs input</text>
+</svg>

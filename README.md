@@ -1,16 +1,17 @@
-# ClaudeLights 🟢🟡🔴
+# ClaudeLights <img src="docs/media/lights-title.svg" alt="green, yellow and red status lights" height="16">
 
 **A traffic light for your [Claude Code](https://claude.com/claude-code)
 sessions, right in the macOS menu bar.**
 
 Run Claude Code in three terminals and one glance tells you whether anything
-needs you: 🟢 done · 🟡 working · 🔴 needs your input. Click a session to jump
-straight to its terminal window.
+needs you: <img src="docs/media/pill-done.svg" alt="done" height="20"> <img
+src="docs/media/pill-working.svg" alt="working" height="20"> <img
+src="docs/media/pill-needs-input.svg" alt="needs input" height="20"> — click a
+session to jump straight to its terminal window.
 
-<!-- TODO before launch: record the hero GIF (icon flips yellow → red → green,
-     click jumps to the terminal) and uncomment:
 ![ClaudeLights in action](docs/media/hero.gif)
--->
+
+*[▶︎ Watch the 30-second intro](docs/media/hero.mp4)*
 
 
 
@@ -32,9 +33,12 @@ Uninstalling them is one click in Settings.
 
 ## Features
 
-- **Five states** at a glance: 🟢 done · 🟡 working · 🔵 compacting ·
-  🔴 needs input · ⚪️ idle. With parallel sessions the icon shows the *worst*
-  state, so red always wins.
+- **Five states** at a glance: <img src="docs/media/pill-done.svg" alt="done"
+  height="20"> <img src="docs/media/pill-working.svg" alt="working"
+  height="20"> <img src="docs/media/pill-compacting.svg" alt="compacting"
+  height="20"> <img src="docs/media/pill-needs-input.svg" alt="needs input"
+  height="20"> <img src="docs/media/pill-idle.svg" alt="idle" height="20">.
+  With parallel sessions the icon shows the *worst* state, so red always wins.
 - **Click a session → jump to its terminal**: focuses the exact window/tab in
   Terminal.app and iTerm2 (via the session's tty), activates the right app
   elsewhere (VS Code, Cursor, Ghostty, WezTerm, Warp, kitty, Alacritty, …).

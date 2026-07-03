@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="50" height="20" viewBox="0 0 50 20" role="img" aria-label="idle">
+  <rect width="50" height="20" rx="10" fill="#98989d" fill-opacity=".16"/>
+  <circle cx="11" cy="10" r="3.6" fill="#8a8a8f"/>
+  <text x="20" y="13.8" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-size="10.5" font-weight="600" fill="#818187">idle</text>
+</svg>
