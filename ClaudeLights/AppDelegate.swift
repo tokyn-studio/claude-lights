@@ -115,7 +115,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         cleanupTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.reload()
+            self?.pruneDeadSessions()
         }
+        // First liveness scan shortly after launch, so a zombie left behind
+        // while the app wasn't running clears after ~1 minute, not ~2 hours
+        // (removal still needs a second scan miss).
+        pruneDeadSessions()
 
         // First run: greet the user and offer one-click hook installation.
         // Read the installer state directly (the Combine mirror into the model
@@ -134,6 +139,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         demo.cancel()
         cleanupTimer?.invalidate()
         watcher?.stop()
+    }
+
+    /// Scans for sessions whose claude process is gone and removes them after
+    /// two consecutive misses. The `ps` call runs off-main; a failed scan
+    /// (nil) skips pruning entirely rather than treating everything as dead.
+    private func pruneDeadSessions() {
+        guard preferences.removeDeadSessions else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let liveTtys = ProcessLiveness.liveClaudeTtys() else { return }
+            DispatchQueue.main.async {
+                guard let self, self.preferences.removeDeadSessions else { return }
+                if self.store.pruneDead(liveTtys: liveTtys, from: self.statusURL) {
+                    self.reload()
+                }
+            }
+        }
     }
 
     /// Reloads the store, pushes sessions into the model, refreshes the icon,

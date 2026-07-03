@@ -26,6 +26,7 @@ final class Preferences: ObservableObject {
         static let attentionSound = "attentionSound"
         static let iconStyle = "iconStyle"
         static let showNeedsInputCount = "showNeedsInputCount"
+        static let removeDeadSessions = "removeDeadSessions"
     }
 
     @Published var notifyWorking: Bool {
@@ -52,6 +53,10 @@ final class Preferences: ObservableObject {
     @Published var showNeedsInputCount: Bool {
         didSet { defaults.set(showNeedsInputCount, forKey: Key.showNeedsInputCount) }
     }
+    /// Whether sessions whose claude process died are removed automatically.
+    @Published var removeDeadSessions: Bool {
+        didSet { defaults.set(removeDeadSessions, forKey: Key.removeDeadSessions) }
+    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -66,6 +71,7 @@ final class Preferences: ObservableObject {
             Key.attentionSound: AttentionSound.defaultName,
             Key.iconStyle: MenuIconStyle.coloredDot.rawValue,
             Key.showNeedsInputCount: true,
+            Key.removeDeadSessions: true,
         ])
 
         notifyWorking = defaults.bool(forKey: Key.notifyWorking)
@@ -75,6 +81,7 @@ final class Preferences: ObservableObject {
         attentionSound = defaults.string(forKey: Key.attentionSound) ?? AttentionSound.defaultName
         iconStyle = defaults.string(forKey: Key.iconStyle).flatMap(MenuIconStyle.init) ?? .coloredDot
         showNeedsInputCount = defaults.bool(forKey: Key.showNeedsInputCount)
+        removeDeadSessions = defaults.bool(forKey: Key.removeDeadSessions)
     }
 
     /// Whether a notification should fire for a transition into `state`.

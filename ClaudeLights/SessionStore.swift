@@ -18,6 +18,9 @@ final class SessionStore {
     private var previousStates: [String: SessionState] = [:]
     private var hasSeededStates = false
 
+    /// Consecutive liveness-scan misses per session (see `pruneDead`).
+    private var deadMissCounts: [String: Int] = [:]
+
     /// Sessions not updated within this window are treated as stale and removed
     /// from both the in-memory list and the on-disk file. Defaults to 2 hours.
     private let staleInterval: TimeInterval
@@ -98,6 +101,44 @@ final class SessionStore {
     /// afterwards to refresh the UI.
     func remove(sessionId: String, from url: URL) {
         mutateFile(at: url) { $0.removeValue(forKey: sessionId) }
+    }
+
+    /// Removes sessions whose tty no longer hosts a living `claude` process
+    /// (a SIGKILLed session never fires SessionEnd and would otherwise sit
+    /// red for up to 2 hours). Conservative on purpose:
+    /// - only sessions with a well-formed tty are ever considered,
+    /// - a session must miss TWO consecutive scans before removal, riding
+    ///   out `ps` races and quick respawns,
+    /// - detached tmux panes keep their tty and process, so they survive.
+    /// Returns whether anything was removed (caller reloads then).
+    func pruneDead(liveTtys: Set<String>, from url: URL) -> Bool {
+        var toRemove: [String] = []
+        for session in sessions {
+            guard let tty = session.tty,
+                  tty.range(of: "^ttys?[0-9]+$", options: .regularExpression) != nil
+            else { continue }
+            if liveTtys.contains(tty) {
+                deadMissCounts.removeValue(forKey: session.sessionId)
+            } else {
+                let misses = (deadMissCounts[session.sessionId] ?? 0) + 1
+                deadMissCounts[session.sessionId] = misses
+                if misses >= 2 { toRemove.append(session.sessionId) }
+            }
+        }
+        // Forget counters for sessions that vanished by other means.
+        let liveIds = Set(sessions.map(\.sessionId))
+        deadMissCounts = deadMissCounts.filter { liveIds.contains($0.key) }
+
+        guard !toRemove.isEmpty else { return false }
+        mutateFile(at: url) { map in
+            for sessionId in toRemove {
+                map.removeValue(forKey: sessionId)
+            }
+        }
+        for sessionId in toRemove {
+            deadMissCounts.removeValue(forKey: sessionId)
+        }
+        return true
     }
 
     /// Removes all sessions currently in the `done` state from the status file.

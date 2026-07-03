@@ -478,6 +478,9 @@ private struct SettingsView: View {
             )) {
                 Text("Start at Login")
             }
+            Toggle(isOn: $preferences.removeDeadSessions) {
+                Text("Remove sessions whose process died")
+            }
             if model.canCheckForUpdates {
                 Button { model.checkForUpdates() } label: {
                     Text("Check for Updates…")
