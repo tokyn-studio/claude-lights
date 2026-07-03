@@ -488,17 +488,41 @@ struct EditorSessionFocusStrategy: FocusStrategy {
         "com.google.antigravity": ("antigravity", ".antigravity/extensions"),
         "com.exafunction.windsurf": ("windsurf", ".windsurf/extensions"),
         "com.vscodium": ("vscodium", ".vscode-oss/extensions"),
+        "com.vscodium.VSCodiumInsiders": ("vscodium-insiders", ".vscode-oss-insiders/extensions"),
     ]
     static let companionId = "tokyn-studio.claudelights-companion"
 
     func attempt(_ session: SessionStatus) -> Bool {
-        guard let pid = session.pid, pid > 1,
+        guard let pid = session.validPid,
               let bundleId = FocusSupport.hostBundleId(of: session),
               let editor = Self.editors[bundleId],
               FocusSupport.isRunning(bundleId: bundleId),
-              Self.companionInstalled(in: editor.extensionsDir),
-              let url = URL(string: "\(editor.scheme)://\(Self.companionId)/focus?pid=\(pid)")
+              Self.companionInstalled(in: editor.extensionsDir)
         else { return false }
+
+        var components = URLComponents()
+        components.scheme = editor.scheme
+        components.host = Self.companionId
+        components.path = "/focus"
+        components.queryItems = [URLQueryItem(name: "pid", value: String(pid))]
+        guard let url = components.url else { return false }
+
+        // Editors deliver extension URIs to the LAST-ACTIVE window. Focus the
+        // session's workspace window first (safe folder-open, reuses the
+        // window that has the folder open), give the switch a moment, then
+        // deep-link — so the right window's extension host handles it.
+        if let cwd = session.cwd, FileManager.default.fileExists(atPath: cwd),
+           let appURL = appURLOnMain(bundleId: bundleId) {
+            FocusSupport.runOnMain {
+                let configuration = NSWorkspace.OpenConfiguration()
+                configuration.activates = true
+                NSWorkspace.shared.open([URL(fileURLWithPath: cwd, isDirectory: true)],
+                                        withApplicationAt: appURL,
+                                        configuration: configuration,
+                                        completionHandler: nil)
+            }
+            usleep(300_000) // strategy runs on the focus queue, not the UI
+        }
 
         var opened = false
         FocusSupport.runOnMain {
@@ -507,12 +531,33 @@ struct EditorSessionFocusStrategy: FocusStrategy {
         return opened
     }
 
+    private func appURLOnMain(bundleId: String) -> URL? {
+        var url: URL?
+        FocusSupport.runOnMain {
+            url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
+        }
+        return url
+    }
+
+    /// The companion counts as installed only while its directory holds a
+    /// package.json and is not queued for removal in the editor's .obsolete
+    /// list — a stale folder must not swallow the click with a dead deep link.
     static func companionInstalled(in extensionsDir: String) -> Bool {
         let base = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(extensionsDir)
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: base.path) else {
             return false
         }
-        return names.contains { $0.hasPrefix(companionId) }
+        var obsolete: Set<String> = []
+        if let data = try? Data(contentsOf: base.appendingPathComponent(".obsolete")),
+           let map = (try? JSONSerialization.jsonObject(with: data)) as? [String: Bool] {
+            obsolete = Set(map.filter(\.value).keys)
+        }
+        return names.contains { name in
+            name.hasPrefix(companionId)
+                && !obsolete.contains(name)
+                && FileManager.default.fileExists(
+                    atPath: base.appendingPathComponent(name).appendingPathComponent("package.json").path)
+        }
     }
 }
 

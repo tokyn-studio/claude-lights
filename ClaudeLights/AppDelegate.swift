@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var model = AppModel(preferences: preferences)
     private lazy var demo = DemoSessionSimulator(statusURL: statusURL)
     private lazy var onboarding = OnboardingController(model: model)
+    private let donations = DonationController()
     private var controller: StatusController?
     private var watcher: FileWatcher?
     private var labelsWatcher: FileWatcher?
@@ -90,6 +91,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.runDemoHandler = { [weak self] in self?.demo.run() }
         model.showOnboardingHandler = { [weak self] in self?.onboarding.show() }
 
+        // Donations: entry points appear only once the Stripe links are real.
+        model.donationAvailable = DonationLinks.isConfigured
+        model.hasDonated = donations.hasDonated
+        model.showDonationHandler = { [weak self] in self?.donations.show() }
+        donations.onDonated = { [weak self] in self?.model.hasDonated = true }
+
         // Keep the installed helper in sync with the bundled one (app updates)
         // and detect the current wiring state.
         installer.ensureHelperCurrent()
@@ -150,14 +157,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func pruneDeadSessions() {
         guard preferences.removeDeadSessions else { return }
         // pid-carrying sessions are checked directly (no subprocess); the ps
-        // scan is only spawned when some session must fall back to its tty.
+        // scan is only spawned when some session has a tty to check. A
+        // missing or failed scan reaches pruneDead as nil ("unknown", never
+        // "dead"), so pid-based pruning still proceeds and a tty session
+        // that appears mid-flight can't accrue a spurious miss.
         let needsTtyScan = store.sessions.contains {
-            $0.pid == nil && $0.tty.map(TTYName.isWellFormed) == true
+            $0.tty.map(TTYName.isWellFormed) == true
         }
-        let hasPidSessions = store.sessions.contains { $0.pid != nil }
+        let hasPidSessions = store.sessions.contains { $0.validPid != nil }
         guard needsTtyScan || hasPidSessions else { return }
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let liveStarts = needsTtyScan ? ProcessLiveness.liveClaudeStarts() : [:] else { return }
+            let liveStarts = needsTtyScan ? ProcessLiveness.liveClaudeStarts() : nil
             DispatchQueue.main.async {
                 guard let self, self.preferences.removeDeadSessions else { return }
                 if self.store.pruneDead(liveStarts: liveStarts, from: self.statusURL) {

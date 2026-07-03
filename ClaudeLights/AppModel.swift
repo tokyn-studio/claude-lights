@@ -49,6 +49,14 @@ final class AppModel: ObservableObject {
     /// Invoked to reopen the welcome window.
     var showOnboardingHandler: (() -> Void)?
 
+    /// True while the Stripe links are configured; all donation entry points
+    /// stay hidden otherwise.
+    @Published var donationAvailable = false
+    /// True once the user clicked a donation tier (switches labels to thanks).
+    @Published var hasDonated = false
+    /// Invoked to open the donation window.
+    var showDonationHandler: (() -> Void)?
+
     init(preferences: Preferences) {
         self.preferences = preferences
         self.startsAtLogin = loginItem.isEnabled
@@ -123,6 +131,10 @@ final class AppModel: ObservableObject {
 
     func showOnboarding() {
         showOnboardingHandler?()
+    }
+
+    func showDonation() {
+        showDonationHandler?()
     }
 
     /// True when at least one session is finished (enables "Clear finished").

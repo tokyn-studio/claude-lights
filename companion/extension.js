@@ -7,13 +7,40 @@
 // The claude process is a descendant of the terminal's shell, so walking the
 // claude pid's ancestor chain and matching it against each terminal's
 // processId identifies the right tab.
+//
+// The pid arrives via a world-writable file, so it is untrusted: before any
+// focusing, the pid must belong to an actual claude CLI process — otherwise
+// a crafted entry could steer keyboard focus to an arbitrary terminal.
+// All process inspection is async; the extension host event loop is never
+// blocked on ps.
 
 const vscode = require('vscode');
-const { execFileSync } = require('child_process');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+
+const execFileAsync = promisify(execFile);
+
+async function ps(args) {
+  const { stdout } = await execFileAsync('/bin/ps', args);
+  return stdout;
+}
+
+/** The pid's command must be the claude CLI (same rule as ClaudeLights:
+ *  basename "claude", or a path under a claude install dir). */
+async function isClaudeProcess(pid) {
+  try {
+    const out = await ps(['-p', String(pid), '-o', 'command=']);
+    const executable = out.trim().split(/\s+/)[0] ?? '';
+    const basename = executable.split('/').pop();
+    return basename === 'claude' || executable.includes('/claude/');
+  } catch {
+    return false; // process gone (ps exits non-zero)
+  }
+}
 
 /** Map of pid -> parent pid for all live processes. */
-function parentMap() {
-  const out = execFileSync('/bin/ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8' });
+async function parentMap() {
+  const out = await ps(['-axo', 'pid=,ppid=']);
   const map = new Map();
   for (const line of out.trim().split('\n')) {
     const [pid, ppid] = line.trim().split(/\s+/).map(Number);
@@ -23,7 +50,7 @@ function parentMap() {
 }
 
 async function focusSessionTerminal(claudePid) {
-  const parents = parentMap();
+  const parents = await parentMap();
   const ancestors = new Set();
   let current = claudePid;
   for (let i = 0; i < 20 && current && current > 1; i++) {
@@ -48,7 +75,8 @@ function activate(context) {
         try {
           const params = new URLSearchParams(uri.query);
           const pid = Number.parseInt(params.get('pid') ?? '', 10);
-          if (!Number.isInteger(pid) || pid <= 1) return;
+          if (!Number.isInteger(pid) || pid <= 1 || pid > 0x7fffffff) return;
+          if (!(await isClaudeProcess(pid))) return;
           await focusSessionTerminal(pid);
         } catch (error) {
           console.error('claudelights-companion:', error);

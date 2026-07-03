@@ -45,20 +45,33 @@ enum ProcessLiveness {
         return result
     }
 
-    /// Whether `pid` is a live claude CLI process — the precise liveness
-    /// check for sessions that carry a pid (agent sessions in editors often
-    /// have no tty). Matched by executable PATH, not kernel comm: the
-    /// official installer runs versioned binaries
+    /// Start date of the live claude CLI process with this pid, or nil when
+    /// the pid is dead or belongs to something else. Matched by executable
+    /// PATH, not kernel comm: the official installer runs versioned binaries
     /// (`~/.local/share/claude/versions/2.1.199`), so comm is the version
     /// number. Keep in sync with isClaudeExecutable in the hook helper.
-    /// A recycled pid virtually never lands on another claude, so no
-    /// start-time check is needed.
-    static func isClaudeProcessAlive(pid: pid_t) -> Bool {
-        guard pid > 1 else { return false }
+    /// Callers compare the start date against the session's last update —
+    /// a claude that started after the session last spoke cannot be its
+    /// process (pid recycling, or a spoofed entry naming a foreign claude).
+    static func claudeProcessStart(pid: pid_t) -> Date? {
+        guard pid > 1 else { return nil }
         var buffer = [CChar](repeating: 0, count: 4096)
-        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return false }
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
         let path = String(cString: buffer)
-        return (path as NSString).lastPathComponent == "claude" || path.contains("/claude/")
+        guard (path as NSString).lastPathComponent == "claude" || path.contains("/claude/") else {
+            return nil
+        }
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        guard sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        let started = info.kp_proc.p_starttime
+        return Date(timeIntervalSince1970: Double(started.tv_sec) + Double(started.tv_usec) / 1_000_000)
+    }
+
+    /// Convenience: is there a live claude process with this pid at all?
+    static func isClaudeProcessAlive(pid: pid_t) -> Bool {
+        claudeProcessStart(pid: pid) != nil
     }
 
     /// Interpreters through which the claude CLI is commonly launched.

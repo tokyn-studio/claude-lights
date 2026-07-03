@@ -132,28 +132,36 @@ final class SessionStore {
     ///   new tty, and scan gaps,
     /// - detached tmux panes keep their tty and process, so they survive.
     /// Returns whether anything was removed (caller reloads then).
-    func pruneDead(liveStarts: [String: [Date]], now: Date = Date(), from url: URL) -> Bool {
+    /// - Parameter liveStarts: tty -> claude start dates from the ps scan;
+    ///   nil when no scan ran (or it failed) — tty evidence is then treated
+    ///   as "unknown", never as "dead". pid checks need no scan.
+    func pruneDead(liveStarts: [String: [Date]]?, now: Date = Date(), from url: URL) -> Bool {
         var toRemove: [String] = []
         for session in sessions {
-            // Anchor + aliveness: a captured claude pid is checked directly
-            // (works for tty-less editor agent sessions); otherwise fall back
-            // to the tty scan.
-            let anchor: String
-            let alive: Bool
-            if let pid = session.pid {
-                anchor = "pid:\(pid)"
-                alive = ProcessLiveness.isClaudeProcessAlive(pid: pid_t(pid))
-            } else if let tty = session.tty, TTYName.isWellFormed(tty) {
-                anchor = tty
-                // Alive: some claude on this tty started before (or at) the
-                // session's last update — small skew tolerance for timestamp
-                // rounding in the hooks.
-                alive = (liveStarts[tty] ?? []).contains {
-                    $0 <= session.timestamp.addingTimeInterval(5)
-                }
-            } else {
-                continue
+            // A session is alive when EITHER anchor confirms a claude process
+            // old enough to be its own (started at/before the last hook
+            // event, small skew tolerance): the captured pid — validated,
+            // the file is world-writable — or a claude on its tty. A wrong
+            // pid must never override a demonstrably live tty, and vice
+            // versa. Sessions with neither anchor are left to stale expiry.
+            let pid = session.validPid
+            let tty = session.tty.flatMap { TTYName.isWellFormed($0) ? $0 : nil }
+            guard pid != nil || tty != nil else { continue }
+
+            let cutoff = session.timestamp.addingTimeInterval(5)
+            var alive = false
+            if let pid, let start = ProcessLiveness.claudeProcessStart(pid: pid) {
+                alive = start <= cutoff
             }
+            if !alive, let tty {
+                if let liveStarts {
+                    alive = (liveStarts[tty] ?? []).contains { $0 <= cutoff }
+                } else {
+                    alive = true // no scan data: don't guess "dead"
+                }
+            }
+
+            let anchor = pid.map { "pid:\($0)" } ?? tty!
 
             if alive {
                 deadMisses.removeValue(forKey: session.sessionId)

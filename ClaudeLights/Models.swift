@@ -97,6 +97,13 @@ struct SessionStatus: Codable {
         case pid
     }
 
+    /// The pid as a validated pid_t, or nil when the (world-writable) status
+    /// file holds nonsense — a trapping Int32 cast would crash the app.
+    var validPid: Int32? {
+        guard let pid, let value = Int32(exactly: pid), value > 1 else { return nil }
+        return value
+    }
+
     /// A short, stable label for the session when no project name is available.
     var shortSessionId: String {
         String(sessionId.prefix(8))

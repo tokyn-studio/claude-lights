@@ -18,3 +18,7 @@ docs/media/*.mov
 
 # Packaged extension artifacts
 companion/*.vsix
+
+# Secrets (Stripe etc.) — never commit
+.env
+.env.*

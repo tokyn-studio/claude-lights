@@ -136,27 +136,60 @@ if CommandLine.arguments.count > 1 {
     let fakePid = fake.processIdentifier
     Thread.sleep(forTimeInterval: 0.3)
     check("live claude-path process detected", ProcessLiveness.isClaudeProcessAlive(pid: fakePid))
+    check("process start date resolved", ProcessLiveness.claudeProcessStart(pid: fakePid) != nil)
 
-    let stamp = iso.string(from: sessionUpdated)
-    let json = """
-    {"agent":{"state":"needs_input","session_id":"agent","pid":\(fakePid),"timestamp":"\(stamp)"}}
-    """
-    try! json.data(using: .utf8)!.write(to: statusURL)
+    func writeSession(_ fields: String) {
+        try! "{\(fields)}".data(using: .utf8)!.write(to: statusURL)
+    }
+    let tsNow = Date()
+    let fresh = iso.string(from: tsNow.addingTimeInterval(10)) // hooked after the process started
 
+    // Fresh pid session stays — even without any tty scan data (nil).
+    writeSession(#""agent":{"state":"needs_input","session_id":"agent","pid":\#(fakePid),"timestamp":"\#(fresh)"}"#)
     let store5 = SessionStore()
-    store5.reload(from: statusURL, now: now)
-    check("pid session survives while process lives",
-          !store5.pruneDead(liveStarts: [:], now: now, from: statusURL)
-          && !store5.pruneDead(liveStarts: [:], now: now.addingTimeInterval(60), from: statusURL))
+    store5.reload(from: statusURL, now: tsNow)
+    check("pid session survives while process lives (no tty scan)",
+          !store5.pruneDead(liveStarts: nil, now: tsNow, from: statusURL)
+          && !store5.pruneDead(liveStarts: nil, now: tsNow.addingTimeInterval(60), from: statusURL))
+
+    // Anti-recycling: a session whose last update PREDATES the process start
+    // cannot claim it (spoofed/recycled pid) — pruned despite the live process.
+    let stale = iso.string(from: tsNow.addingTimeInterval(-3600))
+    writeSession(#""old":{"state":"working","session_id":"old","pid":\#(fakePid),"timestamp":"\#(stale)"}"#)
+    let store6 = SessionStore()
+    store6.reload(from: statusURL, now: tsNow)
+    _ = store6.pruneDead(liveStarts: nil, now: tsNow, from: statusURL)
+    check("recycled/spoofed pid does not keep an old session alive",
+          store6.pruneDead(liveStarts: nil, now: tsNow.addingTimeInterval(60), from: statusURL))
+
+    // A wrong pid must not kill a session whose tty demonstrably lives.
+    let ttyStamp = iso.string(from: tsNow)
+    writeSession(#""mix":{"state":"working","session_id":"mix","pid":99999999,"tty":"ttys003","timestamp":"\#(ttyStamp)"}"#)
+    let ttyAlive: [String: [Date]] = ["ttys003": [tsNow.addingTimeInterval(-600)]]
+    let store7 = SessionStore()
+    store7.reload(from: statusURL, now: tsNow)
+    check("live tty overrides a dead/wrong pid",
+          !store7.pruneDead(liveStarts: ttyAlive, now: tsNow, from: statusURL)
+          && !store7.pruneDead(liveStarts: ttyAlive, now: tsNow.addingTimeInterval(60), from: statusURL))
+
+    // Out-of-range pid from the world-writable file must not crash anything.
+    writeSession(#""huge":{"state":"working","session_id":"huge","pid":4294967296,"timestamp":"\#(ttyStamp)"}"#)
+    let store8 = SessionStore()
+    store8.reload(from: statusURL, now: tsNow)
+    check("overflow pid ignored without crash",
+          !store8.pruneDead(liveStarts: nil, now: tsNow, from: statusURL))
 
     kill(fakePid, SIGKILL)
     fake.waitUntilExit()
     check("dead claude-path process detected", !ProcessLiveness.isClaudeProcessAlive(pid: fakePid))
-    _ = store5.pruneDead(liveStarts: [:], now: now.addingTimeInterval(120), from: statusURL)   // miss 1
+    writeSession(#""agent":{"state":"needs_input","session_id":"agent","pid":\#(fakePid),"timestamp":"\#(fresh)"}"#)
+    let store9 = SessionStore()
+    store9.reload(from: statusURL, now: tsNow)
+    _ = store9.pruneDead(liveStarts: nil, now: tsNow.addingTimeInterval(120), from: statusURL)   // miss 1
     check("pid session removed after two misses",
-          store5.pruneDead(liveStarts: [:], now: now.addingTimeInterval(180), from: statusURL))
-    store5.reload(from: statusURL, now: now)
-    check("pid session gone from file", store5.sessions.isEmpty)
+          store9.pruneDead(liveStarts: nil, now: tsNow.addingTimeInterval(180), from: statusURL))
+    store9.reload(from: statusURL, now: tsNow)
+    check("pid session gone from file", store9.sessions.isEmpty)
 } else {
     print("SKIP: pid-liveness process tests (no waiter binary passed)")
 }
