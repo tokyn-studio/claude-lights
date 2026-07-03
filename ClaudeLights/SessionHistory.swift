@@ -28,12 +28,13 @@ final class SessionHistory: ObservableObject {
         load()
     }
 
-    /// Appends a transition for the given session and persists.
-    func record(_ session: SessionStatus) {
+    /// Appends a transition for the given session and persists. Pass the
+    /// resolved display name so custom session labels show up here too.
+    func record(_ session: SessionStatus, displayName: String? = nil) {
         let entry = HistoryEntry(
             id: UUID(),
             sessionId: session.sessionId,
-            displayName: session.displayName,
+            displayName: displayName ?? session.displayName,
             state: session.state,
             timestamp: session.timestamp
         )

@@ -55,13 +55,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.reload()
         }
 
-        // Renaming writes the labels file; the mirror updates immediately.
+        // Renaming writes the labels file; the single mirror below publishes
+        // every change (optimistic set, watcher reloads, failure reverts).
         model.renameHandler = { [weak self] session, label in
-            guard let self else { return }
-            self.labels.setLabel(label, for: session.sessionId)
-            self.model.sessionLabels = self.labels.labels
+            self?.labels.setLabel(label, for: session.sessionId)
         }
-        model.sessionLabels = labels.labels
+        labels.$labels
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.model.sessionLabels = $0 }
+            .store(in: &cancellables)
 
         // Software updates (Sparkle). No-op in the swiftc dev build.
         model.canCheckForUpdates = updater.canCheckForUpdates
@@ -106,11 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // External writers (e.g. a slash-command script) can update labels too.
         let labelsWatcher = FileWatcher(url: labels.fileURL) { [weak self] in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.labels.reload()
-                self.model.sessionLabels = self.labels.labels
-            }
+            DispatchQueue.main.async { self?.labels.reload() }
         }
         labelsWatcher.start()
         self.labelsWatcher = labelsWatcher
@@ -143,8 +141,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func reload() {
         store.reload(from: statusURL)
         model.update(sessions: store.sessions)
-        labels.prune(keeping: Set(store.sessions.map(\.sessionId)))
-        model.sessionLabels = labels.labels
         controller?.updateIcon()
         handleTransitions(store.recentTransitions)
     }
@@ -159,8 +155,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// for each session that just changed state.
     private func handleTransitions(_ transitions: [SessionStatus]) {
         for session in transitions {
-            // History captures every transition immediately (not debounced).
-            history.record(session)
+            // History captures every transition immediately (not debounced),
+            // under the same name the panel and notifications show.
+            history.record(session, displayName: model.displayName(for: session))
             scheduleNotification(for: session)
         }
     }

@@ -222,20 +222,42 @@ private struct SessionRow: View {
                 .font(.callout)
                 .focused($nameFieldFocused)
                 .onSubmit { commitEditing() }
-                .onExitCommand { isEditing = false }
+                .onExitCommand { cancelEditing() }
+                // Finder-style commit on blur: clicking elsewhere must not
+                // leave the row stuck as an unfocusable text field.
+                .onChange(of: nameFieldFocused) { focused in
+                    if !focused { commitEditing() }
+                }
         }
     }
 
     private func beginEditing() {
         draft = customLabel ?? ""
         isEditing = true
-        // Focus after the field exists in the hierarchy.
-        DispatchQueue.main.async { nameFieldFocused = true }
+        focusNameField()
+    }
+
+    /// The context menu's teardown can still hold first responder for a
+    /// moment, dropping a single focus request — retry briefly.
+    private func focusNameField(attempt: Int = 0) {
+        guard isEditing, attempt < 5 else { return }
+        nameFieldFocused = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            if isEditing && !nameFieldFocused {
+                focusNameField(attempt: attempt + 1)
+            }
+        }
     }
 
     private func commitEditing() {
+        guard isEditing else { return }
         isEditing = false
         onRename(draft)
+    }
+
+    private func cancelEditing() {
+        // Clear the flag before focus moves so the blur handler won't commit.
+        isEditing = false
     }
 
     private var stateLabel: LocalizedStringKey { stateDisplayLabel(session.state) }
