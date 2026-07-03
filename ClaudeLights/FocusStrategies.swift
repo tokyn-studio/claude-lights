@@ -166,7 +166,9 @@ enum FocusSupport {
         guard process.terminationStatus == 0 else { return nil }
         lock.lock()
         defer { lock.unlock() }
-        return String(data: buffer, encoding: .utf8)
+        // Lossy decode on purpose: one process with non-UTF8 argv bytes must
+        // not turn an entire `ps` scan into a failure.
+        return String(decoding: buffer, as: UTF8.self)
     }
 
     /// Finds a CLI binary in the usual install locations (Homebrew on Apple
@@ -189,7 +191,7 @@ enum FocusSupport {
     /// injection (it originates from the on-disk status file, which any local
     /// process can write).
     static func focusWindow(bundleId: String, tty: String) -> Bool {
-        guard tty.range(of: "^ttys?[0-9]+$", options: .regularExpression) != nil,
+        guard TTYName.isWellFormed(tty),
               isRunning(bundleId: bundleId)
         else { return false }
         let source: String

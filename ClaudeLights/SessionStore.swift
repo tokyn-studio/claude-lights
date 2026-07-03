@@ -18,8 +18,15 @@ final class SessionStore {
     private var previousStates: [String: SessionState] = [:]
     private var hasSeededStates = false
 
-    /// Consecutive liveness-scan misses per session (see `pruneDead`).
-    private var deadMissCounts: [String: Int] = [:]
+    /// Liveness-scan misses per session (see `pruneDead`). A miss only counts
+    /// as "consecutive" while it is fresh and the session's tty is unchanged.
+    private struct DeadMissRecord {
+        var tty: String
+        var misses: Int
+        var lastMiss: Date
+    }
+
+    private var deadMisses: [String: DeadMissRecord] = [:]
 
     /// Sessions not updated within this window are treated as stale and removed
     /// from both the in-memory list and the on-disk file. Defaults to 2 hours.
@@ -54,14 +61,20 @@ final class SessionStore {
             return
         }
 
-        // Identify and remove stale entries.
+        // Identify and remove stale entries. The rewrite happens under the
+        // status lock (fresh read inside), so a hook firing in between can't
+        // be clobbered; the display copy below just drops them locally.
         let staleKeys = map.filter { now.timeIntervalSince($0.value.timestamp) > staleInterval }
             .map(\.key)
         if !staleKeys.isEmpty {
             for key in staleKeys {
                 map.removeValue(forKey: key)
             }
-            persist(map, to: url)
+            mutateFile(at: url) { onDisk in
+                for key in staleKeys where now.timeIntervalSince(onDisk[key]?.timestamp ?? now) > staleInterval {
+                    onDisk.removeValue(forKey: key)
+                }
+            }
         }
 
         sessions = map.values.sorted { lhs, rhs in
@@ -103,31 +116,52 @@ final class SessionStore {
         mutateFile(at: url) { $0.removeValue(forKey: sessionId) }
     }
 
-    /// Removes sessions whose tty no longer hosts a living `claude` process
-    /// (a SIGKILLed session never fires SessionEnd and would otherwise sit
-    /// red for up to 2 hours). Conservative on purpose:
+    /// A miss older than this cannot count as "consecutive" — it may predate
+    /// a long gap (pruning toggled off, machine asleep).
+    private let missFreshness: TimeInterval = 5 * 60
+
+    /// Removes sessions whose tty no longer hosts a `claude` process that is
+    /// OLD ENOUGH to be theirs (a SIGKILLed session never fires SessionEnd
+    /// and would otherwise sit red for up to 2 hours). `liveStarts` maps each
+    /// tty to the start dates of its claude processes; a process that started
+    /// after the session's last hook event cannot be that session — this is
+    /// what defeats pty-number recycling. Conservative on purpose:
     /// - only sessions with a well-formed tty are ever considered,
-    /// - a session must miss TWO consecutive scans before removal, riding
-    ///   out `ps` races and quick respawns,
+    /// - a session must miss TWO consecutive fresh scans on the SAME tty
+    ///   before removal, riding out `ps` races, quick respawns, resumes on a
+    ///   new tty, and scan gaps,
     /// - detached tmux panes keep their tty and process, so they survive.
     /// Returns whether anything was removed (caller reloads then).
-    func pruneDead(liveTtys: Set<String>, from url: URL) -> Bool {
+    func pruneDead(liveStarts: [String: [Date]], now: Date = Date(), from url: URL) -> Bool {
         var toRemove: [String] = []
         for session in sessions {
-            guard let tty = session.tty,
-                  tty.range(of: "^ttys?[0-9]+$", options: .regularExpression) != nil
-            else { continue }
-            if liveTtys.contains(tty) {
-                deadMissCounts.removeValue(forKey: session.sessionId)
+            guard let tty = session.tty, TTYName.isWellFormed(tty) else { continue }
+
+            // Alive: some claude on this tty started before (or at) the
+            // session's last update — small skew tolerance for timestamp
+            // rounding in the hooks.
+            let alive = (liveStarts[tty] ?? []).contains {
+                $0 <= session.timestamp.addingTimeInterval(5)
+            }
+            if alive {
+                deadMisses.removeValue(forKey: session.sessionId)
+                continue
+            }
+
+            if var record = deadMisses[session.sessionId],
+               record.tty == tty,
+               now.timeIntervalSince(record.lastMiss) <= missFreshness {
+                record.misses += 1
+                record.lastMiss = now
+                deadMisses[session.sessionId] = record
+                if record.misses >= 2 { toRemove.append(session.sessionId) }
             } else {
-                let misses = (deadMissCounts[session.sessionId] ?? 0) + 1
-                deadMissCounts[session.sessionId] = misses
-                if misses >= 2 { toRemove.append(session.sessionId) }
+                deadMisses[session.sessionId] = DeadMissRecord(tty: tty, misses: 1, lastMiss: now)
             }
         }
         // Forget counters for sessions that vanished by other means.
         let liveIds = Set(sessions.map(\.sessionId))
-        deadMissCounts = deadMissCounts.filter { liveIds.contains($0.key) }
+        deadMisses = deadMisses.filter { liveIds.contains($0.key) }
 
         guard !toRemove.isEmpty else { return false }
         mutateFile(at: url) { map in
@@ -136,7 +170,7 @@ final class SessionStore {
             }
         }
         for sessionId in toRemove {
-            deadMissCounts.removeValue(forKey: sessionId)
+            deadMisses.removeValue(forKey: sessionId)
         }
         return true
     }
@@ -150,22 +184,41 @@ final class SessionStore {
         }
     }
 
-    /// Loads the file, applies `transform`, and writes it back atomically.
+    /// Loads the file, applies `transform`, and writes it back atomically —
+    /// under the same `<file>.lock` flock the hook helper serializes on, so a
+    /// hook firing mid-rewrite is never clobbered (lost update). The lock is
+    /// non-blocking with bounded retries; when it can't be acquired the write
+    /// is skipped and the next cycle retries.
     private func mutateFile(at url: URL, _ transform: (inout [String: SessionStatus]) -> Void) {
+        let lockFD = open(url.path + ".lock", O_CREAT | O_RDWR, 0o644)
+        var locked = false
+        if lockFD >= 0 {
+            for _ in 0..<10 {
+                if flock(lockFD, LOCK_EX | LOCK_NB) == 0 {
+                    locked = true
+                    break
+                }
+                usleep(30_000)
+            }
+        }
+        defer {
+            if lockFD >= 0 {
+                if locked { flock(lockFD, LOCK_UN) }
+                close(lockFD)
+            }
+        }
+        guard locked else { return }
+
         guard let data = try? Data(contentsOf: url) else { return }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard var map = try? decoder.decode([String: SessionStatus].self, from: data) else { return }
         transform(&map)
-        persist(map, to: url)
-    }
 
-    /// Atomically writes the pruned session map back to disk.
-    private func persist(_ map: [String: SessionStatus], to url: URL) {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(map) else { return }
-        try? data.write(to: url, options: .atomic)
+        guard let encoded = try? encoder.encode(map) else { return }
+        try? encoded.write(to: url, options: .atomic)
     }
 }

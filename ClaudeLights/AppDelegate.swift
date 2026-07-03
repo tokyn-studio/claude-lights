@@ -144,13 +144,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Scans for sessions whose claude process is gone and removes them after
     /// two consecutive misses. The `ps` call runs off-main; a failed scan
     /// (nil) skips pruning entirely rather than treating everything as dead.
+    /// No subprocess is spawned at all while no session carries a tty (the
+    /// common idle state).
     private func pruneDeadSessions() {
-        guard preferences.removeDeadSessions else { return }
+        guard preferences.removeDeadSessions,
+              store.sessions.contains(where: { $0.tty.map(TTYName.isWellFormed) == true })
+        else { return }
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let liveTtys = ProcessLiveness.liveClaudeTtys() else { return }
+            guard let liveStarts = ProcessLiveness.liveClaudeStarts() else { return }
             DispatchQueue.main.async {
                 guard let self, self.preferences.removeDeadSessions else { return }
-                if self.store.pruneDead(liveTtys: liveTtys, from: self.statusURL) {
+                if self.store.pruneDead(liveStarts: liveStarts, from: self.statusURL) {
                     self.reload()
                 }
             }

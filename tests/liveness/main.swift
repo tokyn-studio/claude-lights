@@ -1,7 +1,8 @@
 import Foundation
 
-// Headless tests for dead-session pruning: ps-output parsing and the
-// two-consecutive-miss rule in SessionStore.pruneDead.
+// Headless tests for dead-session pruning: ps-output parsing (with process
+// start times), command classification, tty recycling, and the
+// two-consecutive-fresh-miss rule in SessionStore.pruneDead.
 
 var failures = 0
 
@@ -14,66 +15,111 @@ func check(_ name: String, _ condition: Bool, _ detail: String = "") {
     }
 }
 
-// --- parseLiveTtys ---------------------------------------------------------------
+// --- isClaudeCommand -------------------------------------------------------------
+func tokens(_ s: String) -> [Substring] { s.split(separator: " ") }
+check("bare claude", ProcessLiveness.isClaudeCommand(tokens("claude")))
+check("absolute path", ProcessLiveness.isClaudeCommand(tokens("/opt/homebrew/bin/claude --continue")))
+check("node wrapper", ProcessLiveness.isClaudeCommand(tokens("/usr/local/bin/node /Users/x/bin/claude")))
+check("node wrapper with flags",
+      ProcessLiveness.isClaudeCommand(tokens("node --no-warnings --enable-source-maps /x/bin/claude")))
+check("bun wrapper", ProcessLiveness.isClaudeCommand(tokens("bun /x/bin/claude")))
+check("shell wrapper argument NOT matched", !ProcessLiveness.isClaudeCommand(tokens("/bin/bash ./run.sh claude")))
+check("vim with claude file NOT matched", !ProcessLiveness.isClaudeCommand(tokens("vim claude")))
+check("claude-lights-helper NOT matched", !ProcessLiveness.isClaudeCommand(tokens("/usr/local/bin/claude-lights-helper")))
+check("Desktop app binary NOT matched",
+      !ProcessLiveness.isClaudeCommand(tokens("/Applications/Claude.app/Contents/MacOS/Claude")))
+check("login shell NOT matched", !ProcessLiveness.isClaudeCommand(tokens("-zsh")))
+check("node with non-claude script NOT matched", !ProcessLiveness.isClaudeCommand(tokens("node /x/server.js claude")))
+
+// --- parseLiveStarts ----------------------------------------------------------------
 let psOutput = """
-ttys001  -zsh
-ttys003  /opt/homebrew/bin/node /Users/me/.nvm/versions/node/v22/bin/claude --continue
-ttys004  claude
-ttys005  /usr/local/bin/claude-lights-helper
-??       /Applications/Claude.app/Contents/MacOS/Claude
-ttys007  vim notes-about-claude.md
-ttys008  /bin/bash ./run.sh claude
+ttys001  Wed Jul  1 08:00:00 2026 -zsh
+ttys003  Wed Jul  1 09:03:36 2026 /opt/homebrew/bin/node /Users/me/bin/claude --continue
+ttys004  Thu Jul  2 10:15:00 2026 claude
+??       Wed Jul  1 08:00:00 2026 /Applications/Claude.app/Contents/MacOS/Claude
+ttys007  Wed Jul  1 08:00:00 2026 vim notes-about-claude.md
 """
-let live = ProcessLiveness.parseLiveTtys(psOutput: psOutput)
-check("node wrapper detected", live.contains("ttys003"))
-check("bare claude detected", live.contains("ttys004"))
-check("claude-lights-helper not matched", !live.contains("ttys005"))
-check("Desktop app (no tty) ignored", !live.contains("??"))
-check("file argument containing claude ignored", !live.contains("ttys007"))
-check("shell wrapper third token matched", live.contains("ttys008"))
-check("plain shell not matched", !live.contains("ttys001"))
+let starts = ProcessLiveness.parseLiveStarts(psOutput: psOutput)
+check("wrapper tty parsed", starts["ttys003"]?.count == 1)
+check("bare claude tty parsed", starts["ttys004"]?.count == 1)
+check("shell/vim/desktop ignored",
+      starts["ttys001"] == nil && starts["ttys007"] == nil && starts.count == 2, "\(starts.keys)")
+
+let lstartFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "EEE MMM d HH:mm:ss yyyy"
+    return formatter
+}()
+let expected = lstartFormatter.date(from: "Wed Jul 1 09:03:36 2026")!
+check("lstart parsed correctly", starts["ttys003"]?.first == expected)
 
 // Real scan must never crash and must return a value on a healthy system.
-check("real ps scan returns a set", ProcessLiveness.liveClaudeTtys() != nil)
+check("real ps scan returns a map", ProcessLiveness.liveClaudeStarts() != nil)
 
-// --- pruneDead: two-miss rule -------------------------------------------------------
+// --- pruneDead --------------------------------------------------------------------
 let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("liveness-\(UUID().uuidString)")
 try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 let statusURL = dir.appendingPathComponent("status.json")
 
+let iso = ISO8601DateFormatter()
+let now = iso.date(from: "2026-07-03T12:00:00Z")!
+let sessionUpdated = iso.date(from: "2026-07-03T11:00:00Z")!
+
 func writeStatus() {
+    let stamp = iso.string(from: sessionUpdated)
     let json = """
-    {"alive":{"state":"working","session_id":"alive","tty":"ttys003","timestamp":"\(iso(Date()))"},
-     "dead":{"state":"needs_input","session_id":"dead","tty":"ttys009","timestamp":"\(iso(Date()))"},
-     "no-tty":{"state":"working","session_id":"no-tty","timestamp":"\(iso(Date()))"}}
+    {"alive":{"state":"working","session_id":"alive","tty":"ttys003","timestamp":"\(stamp)"},
+     "dead":{"state":"needs_input","session_id":"dead","tty":"ttys009","timestamp":"\(stamp)"},
+     "no-tty":{"state":"working","session_id":"no-tty","timestamp":"\(stamp)"}}
     """
     try! json.data(using: .utf8)!.write(to: statusURL)
 }
-func iso(_ date: Date) -> String { ISO8601DateFormatter().string(from: date) }
+
+let oldStart = sessionUpdated.addingTimeInterval(-3600) // predates the session: could be its process
+let newStart = sessionUpdated.addingTimeInterval(600)   // started after the last hook: recycled tty
 
 writeStatus()
 let store = SessionStore()
-store.reload(from: statusURL)
+store.reload(from: statusURL, now: now)
 check("three sessions loaded", store.sessions.count == 3)
 
-let liveSet: Set<String> = ["ttys003"]
-check("first miss removes nothing", !store.pruneDead(liveTtys: liveSet, from: statusURL))
-store.reload(from: statusURL)
+let live: [String: [Date]] = ["ttys003": [oldStart]]
+check("first miss removes nothing", !store.pruneDead(liveStarts: live, now: now, from: statusURL))
+store.reload(from: statusURL, now: now)
 check("still three after first miss", store.sessions.count == 3)
 
-check("second miss removes the dead one", store.pruneDead(liveTtys: liveSet, from: statusURL))
-store.reload(from: statusURL)
-let ids = Set(store.sessions.map(\.sessionId))
-check("alive and no-tty survive", ids == ["alive", "no-tty"], "\(ids)")
+check("second miss removes the dead one",
+      store.pruneDead(liveStarts: live, now: now.addingTimeInterval(60), from: statusURL))
+store.reload(from: statusURL, now: now)
+check("alive and no-tty survive", Set(store.sessions.map(\.sessionId)) == ["alive", "no-tty"])
 
-// --- miss counter resets when the process reappears -----------------------------------
+// --- tty recycling: a claude that started AFTER the session is not its process ------
 writeStatus()
-store.reload(from: statusURL)
-_ = store.pruneDead(liveTtys: ["ttys003"], from: statusURL)          // miss 1 for "dead"
-_ = store.pruneDead(liveTtys: ["ttys003", "ttys009"], from: statusURL) // reappears: reset
-check("reappearance resets the counter", !store.pruneDead(liveTtys: ["ttys003"], from: statusURL))
-store.reload(from: statusURL)
-check("session survives non-consecutive misses", store.sessions.count == 3)
+let store2 = SessionStore()
+store2.reload(from: statusURL, now: now)
+let recycled: [String: [Date]] = ["ttys003": [oldStart], "ttys009": [newStart]]
+_ = store2.pruneDead(liveStarts: recycled, now: now, from: statusURL)
+check("recycled tty still removes the zombie",
+      store2.pruneDead(liveStarts: recycled, now: now.addingTimeInterval(60), from: statusURL))
+
+// --- reappearance resets the counter --------------------------------------------------
+writeStatus()
+let store3 = SessionStore()
+store3.reload(from: statusURL, now: now)
+_ = store3.pruneDead(liveStarts: live, now: now, from: statusURL)                       // miss 1
+let revived: [String: [Date]] = ["ttys003": [oldStart], "ttys009": [oldStart]]
+_ = store3.pruneDead(liveStarts: revived, now: now.addingTimeInterval(60), from: statusURL) // alive again
+check("reappearance resets the counter",
+      !store3.pruneDead(liveStarts: live, now: now.addingTimeInterval(120), from: statusURL))
+
+// --- stale misses don't count as consecutive -------------------------------------------
+writeStatus()
+let store4 = SessionStore()
+store4.reload(from: statusURL, now: now)
+_ = store4.pruneDead(liveStarts: live, now: now, from: statusURL)                       // miss 1
+check("miss after a long gap starts over",
+      !store4.pruneDead(liveStarts: live, now: now.addingTimeInterval(3600), from: statusURL))
 
 print(failures == 0 ? "\nAll liveness tests passed." : "\n\(failures) test(s) failed.")
 exit(failures == 0 ? 0 : 1)

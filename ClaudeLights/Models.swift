@@ -1,5 +1,14 @@
 import Foundation
 
+/// Validation for tty names coming from the world-writable status file or
+/// from `ps` output — shared by focusing, liveness, and pruning code.
+enum TTYName {
+    /// "ttys003"-style device names; anything else is treated as absent.
+    static func isWellFormed(_ name: String) -> Bool {
+        name.range(of: "^ttys?[0-9]+$", options: .regularExpression) != nil
+    }
+}
+
 /// The lifecycle state a Claude Code session reports through its hooks.
 ///
 /// The raw values match the strings written into the status file by the hook
