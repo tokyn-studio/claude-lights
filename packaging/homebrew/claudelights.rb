@@ -24,8 +24,8 @@ cask "claudelights" do
   zap trash: [
     "~/.claude/claudelights-status.json",
     "~/Library/Application Support/ClaudeLights",
-    "~/Library/Caches/studio.vanta.claudelights",
-    "~/Library/Preferences/studio.vanta.claudelights.plist",
+    "~/Library/Caches/studio.tokyn.claudelights",
+    "~/Library/Preferences/studio.tokyn.claudelights.plist",
   ]
 
   caveats <<~EOS

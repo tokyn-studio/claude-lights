@@ -40,7 +40,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <dict>
 	<key>CFBundleDevelopmentRegion</key><string>en</string>
 	<key>CFBundleExecutable</key><string>ClaudeLights</string>
-	<key>CFBundleIdentifier</key><string>studio.vanta.claudelights</string>
+	<key>CFBundleIdentifier</key><string>studio.tokyn.claudelights</string>
 	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 	<key>CFBundleName</key><string>ClaudeLights</string>
 	<key>CFBundleDisplayName</key><string>ClaudeLights</string>

@@ -21,7 +21,7 @@ final class SessionLabels: ObservableObject {
     @Published private(set) var labels: [String: String] = [:]
 
     private let url: URL
-    private let ioQueue = DispatchQueue(label: "studio.vanta.claudelights.labels", qos: .utility)
+    private let ioQueue = DispatchQueue(label: "studio.tokyn.claudelights.labels", qos: .utility)
 
     /// Exposed so the app can watch the file for external writes.
     var fileURL: URL { url }

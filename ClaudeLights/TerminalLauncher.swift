@@ -11,7 +11,7 @@ import AppKit
 final class TerminalLauncher {
     /// Subprocess-based strategies must not block the UI; the chain runs on
     /// this queue and individual strategies hop to main where required.
-    private let queue = DispatchQueue(label: "studio.vanta.claudelights.focus", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "studio.tokyn.claudelights.focus", qos: .userInitiated)
 
     /// One focus attempt at a time: a hung terminal can hold the chain for
     /// several subprocess timeouts, and impatient re-clicks must be dropped
