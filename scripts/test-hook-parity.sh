@@ -44,7 +44,7 @@ normalize() {
   if [ ! -f "$file" ]; then echo "<absent>"; return; fi
   jq -S 'walk(
       if type == "object" then del(.cwd, .bundle_id, .tmux_pane, .wezterm_pane,
-                                   .kitty_window_id, .kitty_listen_on,
+                                   .kitty_window_id, .kitty_listen_on, .pid,
                                    .active_seconds)
       else . end
     )

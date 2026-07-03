@@ -121,5 +121,45 @@ _ = store4.pruneDead(liveStarts: live, now: now, from: statusURL)               
 check("miss after a long gap starts over",
       !store4.pruneDead(liveStarts: live, now: now.addingTimeInterval(3600), from: statusURL))
 
+// --- pid-based liveness (sessions without a tty, e.g. editor agent sessions) ---
+check("pid 1 is not claude", !ProcessLiveness.isClaudeProcessAlive(pid: 1))
+
+// A freshly built sleeper under a .../claude/versions/ path (mirrors the
+// official installer layout; matches the path rule). Deliberately NOT a
+// copied system binary — those can wedge uninterruptibly in dyld and hang
+// the whole test in waitUntilExit.
+if CommandLine.arguments.count > 1 {
+    let waiterPath = CommandLine.arguments[1]
+    let fake = Process()
+    fake.executableURL = URL(fileURLWithPath: waiterPath)
+    try! fake.run()
+    let fakePid = fake.processIdentifier
+    Thread.sleep(forTimeInterval: 0.3)
+    check("live claude-path process detected", ProcessLiveness.isClaudeProcessAlive(pid: fakePid))
+
+    let stamp = iso.string(from: sessionUpdated)
+    let json = """
+    {"agent":{"state":"needs_input","session_id":"agent","pid":\(fakePid),"timestamp":"\(stamp)"}}
+    """
+    try! json.data(using: .utf8)!.write(to: statusURL)
+
+    let store5 = SessionStore()
+    store5.reload(from: statusURL, now: now)
+    check("pid session survives while process lives",
+          !store5.pruneDead(liveStarts: [:], now: now, from: statusURL)
+          && !store5.pruneDead(liveStarts: [:], now: now.addingTimeInterval(60), from: statusURL))
+
+    kill(fakePid, SIGKILL)
+    fake.waitUntilExit()
+    check("dead claude-path process detected", !ProcessLiveness.isClaudeProcessAlive(pid: fakePid))
+    _ = store5.pruneDead(liveStarts: [:], now: now.addingTimeInterval(120), from: statusURL)   // miss 1
+    check("pid session removed after two misses",
+          store5.pruneDead(liveStarts: [:], now: now.addingTimeInterval(180), from: statusURL))
+    store5.reload(from: statusURL, now: now)
+    check("pid session gone from file", store5.sessions.isEmpty)
+} else {
+    print("SKIP: pid-liveness process tests (no waiter binary passed)")
+}
+
 print(failures == 0 ? "\nAll liveness tests passed." : "\n\(failures) test(s) failed.")
 exit(failures == 0 ? 0 : 1)

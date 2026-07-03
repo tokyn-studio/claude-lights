@@ -472,6 +472,50 @@ struct AppleScriptTtyFocusStrategy: FocusStrategy {
     }
 }
 
+// MARK: - Tier 1.5: exact in-editor session (companion extension)
+
+/// VS Code family with the ClaudeLights Companion extension installed:
+/// deep-links `<scheme>://tokyn-studio.claudelights-companion/focus?pid=…`,
+/// and the extension focuses the exact integrated-terminal tab whose shell
+/// hosts that claude process — several sessions in ONE window included.
+/// Falls through when the session has no pid or the companion isn't there.
+struct EditorSessionFocusStrategy: FocusStrategy {
+    /// bundle id -> (URL scheme, extensions dir under $HOME).
+    static let editors: [String: (scheme: String, extensionsDir: String)] = [
+        "com.microsoft.VSCode": ("vscode", ".vscode/extensions"),
+        "com.microsoft.VSCodeInsiders": ("vscode-insiders", ".vscode-insiders/extensions"),
+        "com.todesktop.230313mzl4w4u92": ("cursor", ".cursor/extensions"),
+        "com.google.antigravity": ("antigravity", ".antigravity/extensions"),
+        "com.exafunction.windsurf": ("windsurf", ".windsurf/extensions"),
+        "com.vscodium": ("vscodium", ".vscode-oss/extensions"),
+    ]
+    static let companionId = "tokyn-studio.claudelights-companion"
+
+    func attempt(_ session: SessionStatus) -> Bool {
+        guard let pid = session.pid, pid > 1,
+              let bundleId = FocusSupport.hostBundleId(of: session),
+              let editor = Self.editors[bundleId],
+              FocusSupport.isRunning(bundleId: bundleId),
+              Self.companionInstalled(in: editor.extensionsDir),
+              let url = URL(string: "\(editor.scheme)://\(Self.companionId)/focus?pid=\(pid)")
+        else { return false }
+
+        var opened = false
+        FocusSupport.runOnMain {
+            opened = NSWorkspace.shared.open(url)
+        }
+        return opened
+    }
+
+    static func companionInstalled(in extensionsDir: String) -> Bool {
+        let base = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(extensionsDir)
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: base.path) else {
+            return false
+        }
+        return names.contains { $0.hasPrefix(companionId) }
+    }
+}
+
 // MARK: - Tier 2: exact window
 
 /// Running IDEs (JetBrains, Xcode, Android Studio, VS Code family when the

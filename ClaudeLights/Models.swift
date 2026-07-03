@@ -75,6 +75,9 @@ struct SessionStatus: Codable {
     let kittyWindowId: String?
     /// kitty remote-control socket (from `KITTY_LISTEN_ON`), if configured.
     let kittyListenOn: String?
+    /// PID of the session's claude CLI process, if the hook could identify
+    /// it. Used for exact in-editor terminal focusing and pid-based liveness.
+    let pid: Int?
 
     enum CodingKeys: String, CodingKey {
         case state
@@ -91,6 +94,7 @@ struct SessionStatus: Codable {
         case weztermPane = "wezterm_pane"
         case kittyWindowId = "kitty_window_id"
         case kittyListenOn = "kitty_listen_on"
+        case pid
     }
 
     /// A short, stable label for the session when no project name is available.

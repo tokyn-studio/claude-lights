@@ -15,3 +15,6 @@ claudelights-status.json
 
 # Raw footage (final hero.mp4/hero.gif are committed, raw recordings are not)
 docs/media/*.mov
+
+# Packaged extension artifacts
+companion/*.vsix

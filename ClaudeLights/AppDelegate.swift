@@ -148,11 +148,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// No subprocess is spawned at all while no session carries a tty (the
     /// common idle state).
     private func pruneDeadSessions() {
-        guard preferences.removeDeadSessions,
-              store.sessions.contains(where: { $0.tty.map(TTYName.isWellFormed) == true })
-        else { return }
+        guard preferences.removeDeadSessions else { return }
+        // pid-carrying sessions are checked directly (no subprocess); the ps
+        // scan is only spawned when some session must fall back to its tty.
+        let needsTtyScan = store.sessions.contains {
+            $0.pid == nil && $0.tty.map(TTYName.isWellFormed) == true
+        }
+        let hasPidSessions = store.sessions.contains { $0.pid != nil }
+        guard needsTtyScan || hasPidSessions else { return }
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let liveStarts = ProcessLiveness.liveClaudeStarts() else { return }
+            guard let liveStarts = needsTtyScan ? ProcessLiveness.liveClaudeStarts() : [:] else { return }
             DispatchQueue.main.async {
                 guard let self, self.preferences.removeDeadSessions else { return }
                 if self.store.pruneDead(liveStarts: liveStarts, from: self.statusURL) {

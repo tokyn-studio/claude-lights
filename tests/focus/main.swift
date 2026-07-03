@@ -19,14 +19,14 @@ func check(_ name: String, _ condition: Bool, _ detail: String = "") {
 func session(
     term: String? = nil, tty: String? = nil, cwd: String? = nil,
     bundleId: String? = nil, tmuxPane: String? = nil, weztermPane: String? = nil,
-    kittyWindowId: String? = nil, kittyListenOn: String? = nil
+    kittyWindowId: String? = nil, kittyListenOn: String? = nil, pid: Int? = nil
 ) -> SessionStatus {
     SessionStatus(
         state: .working, sessionId: "test-1", project: "proj", term: term,
         tty: tty, started: nil, activeSeconds: nil, timestamp: Date(),
         cwd: cwd, bundleId: bundleId, tmuxPane: tmuxPane,
         weztermPane: weztermPane, kittyWindowId: kittyWindowId,
-        kittyListenOn: kittyListenOn)
+        kittyListenOn: kittyListenOn, pid: pid)
 }
 
 // --- FocusSupport.run ---------------------------------------------------------
@@ -103,6 +103,17 @@ check("workspace: wrong term -> false",
       !WorkspaceFolderFocusStrategy().attempt(session(term: "Apple_Terminal", cwd: "/tmp")))
 check("workspace: editor not running -> false",
       !WorkspaceFolderFocusStrategy().attempt(session(term: "zed", cwd: "/tmp")))
+// Editor-session strategy: fixtures use com.vscodium (never installed on dev
+// machines) or omit fields, so no URI is ever opened during tests.
+check("editorsession: no pid -> false",
+      !EditorSessionFocusStrategy().attempt(session(term: "vscode", bundleId: "com.vscodium")))
+check("editorsession: editor not running -> false",
+      !EditorSessionFocusStrategy().attempt(session(term: "vscode", bundleId: "com.vscodium", pid: 4242)))
+check("editorsession: non-editor host -> false",
+      !EditorSessionFocusStrategy().attempt(session(term: "Apple_Terminal", pid: 4242)))
+check("editorsession: companion detection is per-editor",
+      !EditorSessionFocusStrategy.companionInstalled(in: ".claudelights-definitely-missing/extensions"))
+
 check("fallback: unknown host -> false", !AppActivationFallbackStrategy().attempt(session(term: "mystery")))
 check("fallback: spoofed bundleId not activated",
       !AppActivationFallbackStrategy().attempt(session(bundleId: "com.apple.Calculator")))

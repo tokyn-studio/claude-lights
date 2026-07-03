@@ -31,6 +31,36 @@ func statusFileURL() -> URL {
         .appendingPathComponent(".claude/claudelights-status.json")
 }
 
+/// Whether a pid's executable is the claude CLI. Matched by executable PATH
+/// (`proc_pidpath`), not the kernel comm: the official installer runs
+/// versioned binaries (`~/.local/share/claude/versions/2.1.199`), so comm is
+/// the version number while argv[0] merely displays "claude".
+/// Keep in sync with ProcessLiveness.isClaudeProcessAlive in the app.
+func isClaudeExecutable(pid: pid_t) -> Bool {
+    var buffer = [CChar](repeating: 0, count: 4096)
+    guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return false }
+    let path = String(cString: buffer)
+    return (path as NSString).lastPathComponent == "claude" || path.contains("/claude/")
+}
+
+/// PID of the claude CLI process this hook belongs to: the nearest matching
+/// ancestor (hook chain: claude -> sh -> helper). Lets the app map a session
+/// to its exact editor terminal and check process liveness for sessions
+/// without a tty.
+func claudeAncestorPid() -> Int32? {
+    var pid = getppid()
+    for _ in 0..<8 {
+        guard pid > 1 else { return nil }
+        if isClaudeExecutable(pid: pid) { return pid }
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        guard sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        pid = info.kp_eproc.e_ppid
+    }
+    return nil
+}
+
 /// The controlling terminal of this process (e.g. "ttys003"), inherited from
 /// the Claude Code session. Native replacement for `ps -o tty= -p $$`.
 func controllingTTY() -> String? {
@@ -186,6 +216,7 @@ func run() {
     // Best-effort focus/context enrichment; only written when present so the
     // app's re-encode (which drops unknown-nil fields anyway) stays stable.
     if let cwd, !cwd.isEmpty { entry["cwd"] = cwd }
+    if let claudePid = claudeAncestorPid() { entry["pid"] = Int(claudePid) }
     let enrichment: [(key: String, envVar: String)] = [
         ("bundle_id", "__CFBundleIdentifier"),
         ("tmux_pane", "TMUX_PANE"),

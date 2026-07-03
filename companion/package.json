@@ -1,0 +1,23 @@
+{
+  "name": "claudelights-companion",
+  "displayName": "ClaudeLights Companion",
+  "description": "Focuses the exact Claude Code session terminal when you click a session in the ClaudeLights menu bar app.",
+  "version": "0.1.0",
+  "publisher": "tokyn-studio",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tokyn-studio/claude-lights"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onUri"
+  ],
+  "main": "./extension.js",
+  "contributes": {}
+}

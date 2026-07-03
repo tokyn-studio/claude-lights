@@ -29,6 +29,7 @@ struct OnboardingView: View {
             Text("A traffic light for your Claude Code sessions, right in the menu bar.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -44,6 +45,7 @@ struct OnboardingView: View {
         HStack(spacing: 8) {
             Circle().fill(color).frame(width: 10, height: 10)
             Text(text).font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -56,6 +58,7 @@ struct OnboardingView: View {
             Text("ClaudeLights adds a few hook entries to ~/.claude/settings.json so Claude Code reports its status. A backup of the file is kept.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             switch model.hookStatus {
             case .installed:
@@ -68,9 +71,11 @@ struct OnboardingView: View {
                 Text("Restart any running Claude Code sessions so they pick up the hooks.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             case .settingsUnreadable(let detail):
                 Label {
                     Text("settings.json could not be parsed: \(detail)")
+                        .fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 }
@@ -87,6 +92,7 @@ struct OnboardingView: View {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -107,12 +113,14 @@ struct OnboardingView: View {
             Text("Allow notifications so ClaudeLights can tell you when a session needs your input — even when you're in another app.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Button { model.enableNotifications() } label: {
                 Text("Enable Notifications")
             }
             Text("Clicking a session later triggers a one-time macOS prompt to allow controlling your terminal.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -124,6 +132,7 @@ struct OnboardingView: View {
             Text("Run a simulated session: watch the menu bar icon turn yellow, red, then green.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Button { model.runDemo() } label: {
                 Text("Simulate a Demo Session")
             }
@@ -143,6 +152,7 @@ struct OnboardingView: View {
             Text("Reopen this window anytime from Settings.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer()
             Button { onDone() } label: {
                 Text("Done")

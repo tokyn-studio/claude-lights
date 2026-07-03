@@ -24,6 +24,7 @@ final class TerminalLauncher {
         WezTermFocusStrategy(),
         KittyFocusStrategy(),
         AppleScriptTtyFocusStrategy(),
+        EditorSessionFocusStrategy(),   // exact terminal tab via companion extension
         WorkspaceFolderFocusStrategy(), // exact + permissionless: must precede AX
         WindowTitleFocusStrategy(),
         AppActivationFallbackStrategy(),

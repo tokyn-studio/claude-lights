@@ -45,6 +45,22 @@ enum ProcessLiveness {
         return result
     }
 
+    /// Whether `pid` is a live claude CLI process — the precise liveness
+    /// check for sessions that carry a pid (agent sessions in editors often
+    /// have no tty). Matched by executable PATH, not kernel comm: the
+    /// official installer runs versioned binaries
+    /// (`~/.local/share/claude/versions/2.1.199`), so comm is the version
+    /// number. Keep in sync with isClaudeExecutable in the hook helper.
+    /// A recycled pid virtually never lands on another claude, so no
+    /// start-time check is needed.
+    static func isClaudeProcessAlive(pid: pid_t) -> Bool {
+        guard pid > 1 else { return false }
+        var buffer = [CChar](repeating: 0, count: 4096)
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return false }
+        let path = String(cString: buffer)
+        return (path as NSString).lastPathComponent == "claude" || path.contains("/claude/")
+    }
+
     /// Interpreters through which the claude CLI is commonly launched.
     private static let interpreters: Set<String> = ["node", "bun", "deno"]
 

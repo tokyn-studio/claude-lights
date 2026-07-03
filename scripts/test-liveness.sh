@@ -15,4 +15,10 @@ xcrun swiftc -o "$WORK/livenesstest" \
   "$ROOT/ClaudeLights/ProcessLiveness.swift" \
   "$ROOT/tests/liveness/main.swift"
 
-"$WORK/livenesstest"
+# Sleeper binary under a .../claude/versions/ path for the pid-liveness tests
+# (freshly built — copied system binaries can wedge in dyld and hang).
+mkdir -p "$WORK/claude/versions"
+printf 'import Foundation\nThread.sleep(forTimeInterval: 600)\n' > "$WORK/waiter.swift"
+xcrun swiftc -o "$WORK/claude/versions/waiter" "$WORK/waiter.swift"
+
+"$WORK/livenesstest" "$WORK/claude/versions/waiter"

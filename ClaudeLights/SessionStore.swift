@@ -135,28 +135,40 @@ final class SessionStore {
     func pruneDead(liveStarts: [String: [Date]], now: Date = Date(), from url: URL) -> Bool {
         var toRemove: [String] = []
         for session in sessions {
-            guard let tty = session.tty, TTYName.isWellFormed(tty) else { continue }
-
-            // Alive: some claude on this tty started before (or at) the
-            // session's last update — small skew tolerance for timestamp
-            // rounding in the hooks.
-            let alive = (liveStarts[tty] ?? []).contains {
-                $0 <= session.timestamp.addingTimeInterval(5)
+            // Anchor + aliveness: a captured claude pid is checked directly
+            // (works for tty-less editor agent sessions); otherwise fall back
+            // to the tty scan.
+            let anchor: String
+            let alive: Bool
+            if let pid = session.pid {
+                anchor = "pid:\(pid)"
+                alive = ProcessLiveness.isClaudeProcessAlive(pid: pid_t(pid))
+            } else if let tty = session.tty, TTYName.isWellFormed(tty) {
+                anchor = tty
+                // Alive: some claude on this tty started before (or at) the
+                // session's last update — small skew tolerance for timestamp
+                // rounding in the hooks.
+                alive = (liveStarts[tty] ?? []).contains {
+                    $0 <= session.timestamp.addingTimeInterval(5)
+                }
+            } else {
+                continue
             }
+
             if alive {
                 deadMisses.removeValue(forKey: session.sessionId)
                 continue
             }
 
             if var record = deadMisses[session.sessionId],
-               record.tty == tty,
+               record.tty == anchor,
                now.timeIntervalSince(record.lastMiss) <= missFreshness {
                 record.misses += 1
                 record.lastMiss = now
                 deadMisses[session.sessionId] = record
                 if record.misses >= 2 { toRemove.append(session.sessionId) }
             } else {
-                deadMisses[session.sessionId] = DeadMissRecord(tty: tty, misses: 1, lastMiss: now)
+                deadMisses[session.sessionId] = DeadMissRecord(tty: anchor, misses: 1, lastMiss: now)
             }
         }
         // Forget counters for sessions that vanished by other means.
