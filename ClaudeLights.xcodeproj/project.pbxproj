@@ -31,6 +31,7 @@
 		1A0000000000000000000BBF /* FocusStrategies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000AAF /* FocusStrategies.swift */; };
 		1A0000000000000000000BC0 /* SessionLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000AB0 /* SessionLabels.swift */; };
 		1A0000000000000000000BC1 /* ProcessLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000AB1 /* ProcessLiveness.swift */; };
+		1A0000000000000000000BC2 /* ConcurrencyStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000AB2 /* ConcurrencyStats.swift */; };
 		1A0000000000000000000D03 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000D02 /* Sparkle */; };
 		1A00000000000000000000B7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000000A7 /* Assets.xcassets */; };
 		1A00000000000000000000B8 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000000A8 /* Localizable.xcstrings */; };
@@ -63,6 +64,7 @@
 		1A0000000000000000000AAF /* FocusStrategies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusStrategies.swift; sourceTree = "<group>"; };
 		1A0000000000000000000AB0 /* SessionLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLabels.swift; sourceTree = "<group>"; };
 		1A0000000000000000000AB1 /* ProcessLiveness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessLiveness.swift; sourceTree = "<group>"; };
+		1A0000000000000000000AB2 /* ConcurrencyStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConcurrencyStats.swift; sourceTree = "<group>"; };
 		1A00000000000000000000A7 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1A00000000000000000000A8 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		1A00000000000000000000A9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -131,6 +133,7 @@
 				1A0000000000000000000AAF /* FocusStrategies.swift */,
 				1A0000000000000000000AB0 /* SessionLabels.swift */,
 				1A0000000000000000000AB1 /* ProcessLiveness.swift */,
+				1A0000000000000000000AB2 /* ConcurrencyStats.swift */,
 				1A00000000000000000000A7 /* Assets.xcassets */,
 				1A00000000000000000000A8 /* Localizable.xcstrings */,
 				1A00000000000000000000A9 /* Info.plist */,
@@ -304,6 +307,7 @@
 				1A0000000000000000000BBF /* FocusStrategies.swift in Sources */,
 				1A0000000000000000000BC0 /* SessionLabels.swift in Sources */,
 				1A0000000000000000000BC1 /* ProcessLiveness.swift in Sources */,
+				1A0000000000000000000BC2 /* ConcurrencyStats.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

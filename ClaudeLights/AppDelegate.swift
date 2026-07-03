@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let updater = Updater()
     private let installer = HookInstaller()
     private let labels = SessionLabels()
+    private let concurrency = ConcurrencyStats()
     private lazy var model = AppModel(preferences: preferences)
     private lazy var demo = DemoSessionSimulator(statusURL: statusURL)
     private lazy var onboarding = OnboardingController(model: model)
@@ -94,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installer.ensureHelperCurrent()
         installer.refreshStatus()
 
-        controller = StatusController(model: model, history: history, usage: usage)
+        controller = StatusController(model: model, history: history, usage: usage, concurrency: concurrency)
 
         // Show an initial state before any file event arrives.
         reload()
@@ -166,6 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func reload() {
         store.reload(from: statusURL)
         model.update(sessions: store.sessions)
+        concurrency.sample(count: store.sessions.count)
         controller?.updateIcon()
         handleTransitions(store.recentTransitions)
     }

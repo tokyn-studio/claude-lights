@@ -15,7 +15,7 @@ final class StatusController {
     private let popover: NSPopover
     private var cancellables: Set<AnyCancellable> = []
 
-    init(model: AppModel, history: SessionHistory, usage: UsageStats) {
+    init(model: AppModel, history: SessionHistory, usage: UsageStats, concurrency: ConcurrencyStats) {
         self.model = model
         self.usage = usage
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -28,7 +28,7 @@ final class StatusController {
         // hosting controller reports a stale/default size, which makes the
         // popover mis-anchor and appear offset from the menu bar icon.
         let hosting = NSHostingController(
-            rootView: PanelView(model: model, history: history, usage: usage)
+            rootView: PanelView(model: model, history: history, usage: usage, concurrency: concurrency)
         )
         hosting.sizingOptions = [.preferredContentSize]
         popover.contentViewController = hosting

@@ -15,6 +15,7 @@ struct PanelView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var history: SessionHistory
     @ObservedObject var usage: UsageStats
+    @ObservedObject var concurrency: ConcurrencyStats
     @State private var mode: PanelMode = .sessions
 
     var body: some View {
@@ -68,7 +69,7 @@ struct PanelView: View {
     private var content: some View {
         switch mode {
         case .sessions: sessionSection
-        case .usage: UsageView(usage: usage, history: history)
+        case .usage: UsageView(usage: usage, history: history, concurrency: concurrency)
         case .history: HistoryView(history: history)
         case .settings: SettingsView(model: model, preferences: model.preferences)
         }
@@ -338,10 +339,11 @@ private func stateDisplayLabel(_ state: SessionState) -> LocalizedStringKey {
     }
 }
 
-/// Today's token usage and time-per-state analytics.
+/// Today's token usage, time-per-state, and session-concurrency analytics.
 private struct UsageView: View {
     @ObservedObject var usage: UsageStats
     let history: SessionHistory
+    @ObservedObject var concurrency: ConcurrencyStats
 
     private static let durationFormatter: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
@@ -364,6 +366,24 @@ private struct UsageView: View {
                 tokenRow("Cache write", usage.today.cacheCreation)
                 Divider()
                 tokenRow("Total", usage.today.total)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Sessions").font(.subheadline).bold()
+                HStack {
+                    Text("Max parallel today").font(.caption)
+                    Spacer()
+                    Text("\(concurrency.todayMax())")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if let average = concurrency.todayAverage() {
+                    HStack {
+                        Text("Average parallel").font(.caption)
+                        Spacer()
+                        Text(average, format: .number.precision(.fractionLength(1)))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
             }
 
             VStack(alignment: .leading, spacing: 5) {
