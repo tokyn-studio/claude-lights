@@ -81,6 +81,10 @@ echo "==> Building styled DMG"
 # Produces the "drag to Applications" window with background + positioned icons.
 "$ROOT/scripts/make-dmg.sh" "$APP" "$DMG"
 
+echo "==> Signing DMG"
+# Gatekeeper checks the container too: sign BEFORE notarizing/stapling.
+codesign --force --sign "Developer ID Application" "$DMG"
+
 echo "==> Notarizing (this can take a few minutes)"
 xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
 
