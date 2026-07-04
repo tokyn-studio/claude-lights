@@ -14,7 +14,7 @@ import Foundation
 
 /// Bumped whenever the wiring or on-disk behavior changes; the app compares it
 /// against the bundled helper to drive self-heal ("needs repair").
-let helperVersion = "1"
+let helperVersion = "2"
 
 let validStates: Set<String> = ["working", "resume", "compacting", "needs_input", "done", "remove"]
 
@@ -83,6 +83,28 @@ func controllingTTY() -> String? {
         }
     }
     return nil
+}
+
+/// Display descriptions of still-running background tasks from the hook
+/// payload's undocumented `background_tasks` array (Stop payloads carry it;
+/// verified against Claude Code 2.1.201). Returns nil when the field is
+/// absent or malformed — the caller then preserves the previous value; an
+/// empty result means "nothing running" and clears the stored key.
+func backgroundTaskSummaries(from payload: [String: Any]) -> [String]? {
+    guard let raw = payload["background_tasks"] else { return nil }
+    guard let list = raw as? [[String: Any]] else { return nil }
+    return list.compactMap { task in
+        if let status = task["status"] as? String, status != "running" { return nil }
+        let candidates = ["description", "command", "agent_type"]
+        guard let value = candidates.lazy
+            .compactMap({ task[$0] as? String })
+            .first(where: { !$0.isEmpty })
+        else { return nil }
+        let cleaned = value
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+        return String(cleaned.prefix(120))
+    }
 }
 
 /// The full top-level object of the status file. Values other than session
@@ -226,6 +248,15 @@ func run() {
     ]
     for (key, envVar) in enrichment {
         if let value = env[envVar], !value.isEmpty { entry[key] = value }
+    }
+
+    // Background tasks still running (undocumented Stop-payload field).
+    // Absent/malformed payloads keep the last known value — the Stop that
+    // precedes an idle_prompt Notification wrote it fresh.
+    if let tasks = backgroundTaskSummaries(from: payload) {
+        if !tasks.isEmpty { entry["background_tasks"] = tasks }
+    } else if let previous = existing["background_tasks"] as? [String], !previous.isEmpty {
+        entry["background_tasks"] = previous
     }
 
     root[sessionId] = entry
