@@ -51,7 +51,6 @@ Uninstalling them is one click in Settings.
   Claude waits for you.
 - **Usage**: today's token counts (input / output / cache) read from Claude
   Code's own transcripts, plus time spent per state.
-- **History** of recent state transitions.
 - **Demo session** in the welcome window — see the traffic light work before
   wiring up anything real.
 - **Auto-updates** via Sparkle, **Start at Login**, full uninstall.

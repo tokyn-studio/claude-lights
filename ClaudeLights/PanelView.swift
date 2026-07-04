@@ -4,13 +4,13 @@ import SwiftUI
 private enum PanelMode {
     case sessions
     case usage
-    case history
     case settings
 }
 
 /// The popover shown when the menu bar icon is clicked: active sessions, usage
-/// stats, a transition history, and settings. Driven entirely by `AppModel` /
-/// `SessionHistory` / `UsageStats`.
+/// stats, and settings. Driven entirely by `AppModel` / `SessionHistory` /
+/// `UsageStats`. History is still recorded (and feeds the usage stats) but is
+/// no longer surfaced as its own tab.
 struct PanelView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var history: SessionHistory
@@ -40,9 +40,6 @@ struct PanelView: View {
                 Button { mode = .usage } label: { Image(systemName: "chart.bar") }
                     .buttonStyle(.plain)
                     .help(Text("Usage"))
-                Button { mode = .history } label: { Image(systemName: "clock") }
-                    .buttonStyle(.plain)
-                    .help(Text("History"))
                 Button { mode = .settings } label: { Image(systemName: "gearshape") }
                     .buttonStyle(.plain)
                     .help(Text("Settings"))
@@ -60,7 +57,6 @@ struct PanelView: View {
         switch mode {
         case .sessions: return "ClaudeLights"
         case .usage: return "Usage"
-        case .history: return "History"
         case .settings: return "Settings"
         }
     }
@@ -70,7 +66,6 @@ struct PanelView: View {
         switch mode {
         case .sessions: sessionSection
         case .usage: UsageView(usage: usage, history: history, concurrency: concurrency)
-        case .history: HistoryView(history: history)
         case .settings: SettingsView(model: model, preferences: model.preferences)
         }
     }
@@ -303,47 +298,6 @@ private struct SessionRow: View {
             Text(Self.stopwatch(worked))
         } else {
             Text(session.timestamp, style: .relative)
-        }
-    }
-}
-
-/// The transition history list.
-private struct HistoryView: View {
-    @ObservedObject var history: SessionHistory
-
-    var body: some View {
-        if history.entries.isEmpty {
-            Text("No history yet")
-                .foregroundStyle(.secondary)
-                .font(.callout)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 14)
-        } else {
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(history.entries) { entry in
-                        HStack(spacing: 8) {
-                            Image(systemName: entry.state.symbolName)
-                                .foregroundStyle(Color(nsColor: entry.state.color))
-                                .font(.system(size: 10))
-                                .frame(width: 12)
-                            Text(entry.displayName)
-                                .font(.caption)
-                                .lineLimit(1)
-                                .help(Text(verbatim: entry.displayName))
-                            Spacer()
-                            Text(entry.timestamp, style: .relative)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 3)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            .frame(maxHeight: 220)
         }
     }
 }

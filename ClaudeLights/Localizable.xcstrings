@@ -84,16 +84,6 @@
       "extractionState" : "manual",
       "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "General" } } }
     },
-    "History" : {
-      "comment" : "Header/title for the transition history",
-      "extractionState" : "manual",
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "History" } } }
-    },
-    "No history yet" : {
-      "comment" : "Empty state for the history view",
-      "extractionState" : "manual",
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No history yet" } } }
-    },
     "Remove" : {
       "comment" : "Tooltip for removing a session",
       "extractionState" : "manual",
